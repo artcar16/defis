@@ -4,12 +4,13 @@
  */
 import { motion, useReducedMotion } from 'motion/react'
 import { DEFAULT_PLAYERS } from '../config/defaults'
+import { queName } from '../core/fr'
 import type { Player } from '../core/types'
 import { useDuel } from '../data/DuelProvider'
+import { deep, tint } from '../ui/color'
 import { Avatar, Button, springy } from '../ui/kit'
-import { useToast } from '../ui/toast'
 import { LoginForm } from './settings/LoginForm'
-import { ON_GOLD, tint } from './settings/format'
+import { ON_GOLD } from './settings/format'
 
 type Fighter = Pick<Player, 'id' | 'name' | 'emoji' | 'color'>
 
@@ -23,24 +24,16 @@ const FLOATERS = [
 ]
 
 export function LoginScreen() {
-  const { demo, snapshot } = useDuel()
-  const toast = useToast()
+  const { demo, snapshot, source } = useDuel()
   const reduced = useReducedMotion() ?? false
 
   const fighters: Fighter[] =
     snapshot.players.length >= 2 ? snapshot.players : DEFAULT_PLAYERS.map((p) => ({ id: p.key, name: p.name, emoji: p.emoji, color: p.color }))
   const [left, right] = fighters
 
-  const submit = async (email: string, password: string) => {
-    void email
-    void password
-    if (demo) {
-      toast({ text: '🧪 C’est la maquette : pas encore de vrais comptes. Choisis ton joueur juste au-dessus 👆', duration: 5000 })
-      return
-    }
-    // Étape 4 : connexion Supabase (email + mot de passe) via la source de données.
-    throw new Error('La connexion n’est pas encore branchée 🛠️')
-  }
+  // La source se charge de tout (Supabase à l'étape 4). En démo, elle répond par un message
+  // qui renvoie aux boutons « Jouer en tant que », affiché sous le formulaire.
+  const submit = (email: string, password: string) => source.signIn(email, password)
 
   return (
     <div className="relative mx-auto flex min-h-dvh max-w-md flex-col overflow-hidden px-4 pt-[max(env(safe-area-inset-top),24px)] pb-[max(env(safe-area-inset-bottom),24px)]">
@@ -84,7 +77,7 @@ export function LoginScreen() {
           animate={{ opacity: 1 }}
           transition={{ delay: 0.3 }}
         >
-          Ongles, grattage, grignotage… Que le meilleur gagne, et que l’autre fasse la vaisselle 🍽️
+          Ongles, grattage, grignotage… Que le duel commence&nbsp;: qui perd fait la vaisselle 🍽️
         </motion.p>
       </header>
 
@@ -122,13 +115,13 @@ export function LoginScreen() {
               <h2 id="demo-title" className="font-display text-[20px] leading-tight font-bold text-ink">
                 Mode démo
               </h2>
-              <p className="text-[15px] leading-snug font-semibold text-muted">Pas encore de vrais comptes : choisis ton camp !</p>
+              <p className="text-[15px] leading-snug font-semibold text-muted">Pas encore de vrais comptes&nbsp;: choisis ton camp&nbsp;!</p>
             </div>
           </div>
           <div className="mt-4 flex flex-col gap-3.5">
             {[left, right].map((p) => (
-              <Button key={p.id} block size="lg" color={p.color} className="text-[19px]!" onClick={() => demo.signIn(p.id)}>
-                Jouer en tant que {p.emoji} {p.name}
+              <Button key={p.id} block size="lg" color={p.color} className="text-[19px]!" onClick={() => demo.signInAs(p.id)}>
+                Jouer en tant {queName(p.name)} {p.emoji}
               </Button>
             ))}
           </div>
@@ -160,7 +153,8 @@ function FighterCard({ player, side }: { player: Fighter; side: 'left' | 'right'
   const dir = side === 'left' ? -1 : 1
   return (
     <motion.div
-      className="flex w-[118px] flex-col items-center"
+      // iPhone SE : un peu plus petits, pour que le face-à-face tienne sans toucher les bords.
+      className="flex w-[100px] flex-col items-center min-[360px]:w-[118px]"
       initial={reduced ? false : { x: dir * 140, rotate: dir * 25, opacity: 0 }}
       animate={{ x: 0, rotate: 0, opacity: 1 }}
       transition={{ type: 'spring', stiffness: 260, damping: 16, delay: 0.2 }}
@@ -169,11 +163,11 @@ function FighterCard({ player, side }: { player: Fighter; side: 'left' | 'right'
         animate={reduced ? undefined : { y: [0, -6, 0], rotate: [0, dir * -3, 0] }}
         transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut', delay: side === 'left' ? 0 : 1.2 }}
       >
-        <Avatar player={player} size="xl" ring />
+        <Avatar player={player} size="xl" ring className="max-[359px]:size-24 max-[359px]:text-6xl" />
       </motion.div>
       <div
         className="mt-3 max-w-full truncate font-display text-[20px] font-bold"
-        style={{ color: `color-mix(in oklab, ${player.color} 78%, var(--color-ink))` }}
+        style={{ color: deep(player.color, 78) }}
       >
         {player.name}
       </div>

@@ -1,8 +1,10 @@
 /**
  * Petits toasts en haut de l'écran (« 👀 Laetitia vient de faire son check-in »).
+ * Purement informatifs : ils laissent passer les taps et ne couvrent jamais le ✕ des feuilles.
  */
 import { AnimatePresence, motion } from 'motion/react'
-import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
+import { typo } from '../core/fr'
 
 export interface ToastInput {
   text: string
@@ -21,17 +23,31 @@ const ToastContext = createContext<((t: ToastInput) => void) | null>(null)
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<ToastItem[]>([])
   const nextId = useRef(1)
+  const timers = useRef(new Set<number>())
+
+  useEffect(() => {
+    const pending = timers.current
+    return () => {
+      for (const t of pending) window.clearTimeout(t)
+      pending.clear()
+    }
+  }, [])
 
   const show = useCallback((t: ToastInput) => {
     const id = nextId.current++
-    setItems((list) => [...list.slice(-2), { ...t, id }])
-    window.setTimeout(() => setItems((list) => list.filter((x) => x.id !== id)), t.duration ?? 3500)
+    setItems((list) => [...list.slice(-2), { ...t, text: typo(t.text), id }])
+    const timer = window.setTimeout(() => {
+      timers.current.delete(timer)
+      setItems((list) => list.filter((x) => x.id !== id))
+    }, t.duration ?? 3500)
+    timers.current.add(timer)
   }, [])
 
   return (
     <ToastContext.Provider value={show}>
       {children}
-      <div className="safe-top pointer-events-none fixed inset-x-0 top-0 z-[60] flex flex-col items-center gap-2 px-4">
+      {/* Réserve à droite (pr-[72px]) : le ✕ des feuilles (44 px + marge) reste visible et touchable. */}
+      <div className="safe-top pointer-events-none fixed inset-x-0 top-0 z-[60] mx-auto flex max-w-md flex-col items-center gap-2 pr-[72px] pl-4">
         <AnimatePresence>
           {items.map((t) => (
             <motion.div
@@ -41,7 +57,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               animate={{ y: 0, opacity: 1, scale: 1 }}
               exit={{ y: -30, opacity: 0, scale: 0.9 }}
               transition={{ type: 'spring', stiffness: 500, damping: 30 }}
-              className="pointer-events-auto max-w-sm rounded-full bg-surface px-5 py-3 font-display text-[15px] font-semibold text-ink shadow-[var(--shadow-pop)]"
+              className="pointer-events-none max-w-sm rounded-[22px] bg-surface px-5 py-3 text-center font-display text-[15px] leading-snug font-semibold text-balance text-ink shadow-[var(--shadow-pop)]"
               style={{ borderBottom: `4px solid ${t.color ?? 'var(--color-gold)'}` }}
               role="status"
             >

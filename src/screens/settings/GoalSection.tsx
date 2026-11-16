@@ -6,12 +6,14 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useId, useMemo, useState } from 'react'
 import { RULES } from '../../config/rules'
 import { nextMonday } from '../../core/dates'
+import { deName } from '../../core/fr'
 import { percentChange } from '../../core/scoring'
 import type { Proposal } from '../../core/types'
 import { formatKg, formatPct, weighInsOf } from '../../core/weight'
 import { useDuel } from '../../data/DuelProvider'
+import { tint } from '../../ui/color'
 import { Button, springy } from '../../ui/kit'
-import { deName, fromLabel, kgInput, parseKg, tint } from './format'
+import { KG_RANGE_ERROR, fromLabel, kgInput, parseKg } from './format'
 import { Label, MiniButton, Note, Section, StatusLine, useAction } from './ui'
 
 type GoalProposal = Proposal & { payload: Extract<Proposal['payload'], { kind: 'goal_weight' }> }
@@ -40,8 +42,12 @@ export function GoalSection({ index }: { index: number }) {
   const goalKg = parseKg(draft)
   const goalPct = goalKg !== null && startKg !== null ? percentChange(startKg, goalKg) : null
 
-  // Le dernier objectif « connu » : proposé, sinon validé pour lundi, sinon en vigueur.
-  const reference = pending ? pending.payload.goalKg : upcoming ? upcoming.payload.goalKg : me.goalKg
+  /** Objectif d'une de mes propositions (null = retrait). Ce sont mes kilos : jamais masqués. */
+  const kgOf = (p: GoalProposal) => (p.payload.clear ? null : p.payload.goalKg)
+  // Objectif en vigueur lundi si rien ne bouge : validé pour lundi, sinon l'actuel.
+  const nextGoal = upcoming ? kgOf(upcoming) : me.goalKg
+  // Le dernier objectif « connu » : proposé, sinon celui de lundi.
+  const reference = pending ? kgOf(pending) : nextGoal
   const unchanged = goalKg !== null && reference !== null && Math.abs(goalKg - reference) < 0.05
   const sameAs = pending ? 'C’est déjà ta proposition en cours 😉' : upcoming ? 'C’est déjà ton objectif de lundi 😉' : 'C’est déjà ton objectif 😉'
 
@@ -51,15 +57,13 @@ export function GoalSection({ index }: { index: number }) {
     setDraft(kgInput(next))
   }
 
+  /** kg = null : retirer l'objectif. Une proposition en attente est remplacée par la source (décision 17). */
   const propose = async (kg: number | null) => {
     const pct = kg !== null && startKg !== null ? percentChange(startKg, kg) : null
-    await run(
-      async () => {
-        if (pending) await source.cancelProposal(pending.id)
-        await source.propose({ kind: 'goal_weight', goalKg: kg, goalFromStartPct: pct })
-      },
-      { text: `Proposition envoyée à ${other.name} 📨`, color: other.color },
-    )
+    await run(() => source.propose({ kind: 'goal_weight', clear: kg === null, goalKg: kg, goalFromStartPct: pct }), {
+      text: pending ? `Proposition remplacée : ${other.name} ne verra que la nouvelle 📨` : `Proposition envoyée à ${other.name} 📨`,
+      color: other.color,
+    })
   }
 
   return (
@@ -91,7 +95,7 @@ export function GoalSection({ index }: { index: number }) {
 
       {upcoming && (
         <StatusLine emoji="📅" color="var(--color-nickel)">
-          Validé : {upcoming.payload.goalKg !== null ? formatKg(upcoming.payload.goalKg) : 'plus d’objectif'}{' '}
+          Validé&nbsp;: {kgOf(upcoming) !== null ? formatKg(kgOf(upcoming)) : 'plus d’objectif'}{' '}
           {fromLabel(upcoming.effectiveFrom ?? nextMonday(today))}
         </StatusLine>
       )}
@@ -105,7 +109,8 @@ export function GoalSection({ index }: { index: number }) {
             </MiniButton>
           }
         >
-          {pending.payload.goalKg !== null ? formatKg(pending.payload.goalKg) : 'Retrait de l’objectif'} proposé — en attente {deName(other.name)}
+          {kgOf(pending) !== null ? `${formatKg(kgOf(pending))} proposé` : 'Retrait de l’objectif proposé'} — en attente{' '}
+          {deName(other.name)}
         </StatusLine>
       )}
 
@@ -140,7 +145,7 @@ export function GoalSection({ index }: { index: number }) {
       <div className="mt-2 min-h-6 px-1 text-center text-[15px] font-semibold" aria-live="polite">
         {goalKg === null ? (
           <span style={{ color: 'var(--color-craquage)' }}>
-            Entre un poids entre {RULES.weighIn.minKg} et {RULES.weighIn.maxKg} kg 🙃
+            {KG_RANGE_ERROR}
           </span>
         ) : goalPct !== null ? (
           <motion.span key={goalPct.toFixed(1)} initial={reduced ? false : { scale: 1.15 }} animate={{ scale: 1 }} transition={springy} className="inline-block text-ink-soft">
@@ -148,7 +153,7 @@ export function GoalSection({ index }: { index: number }) {
             {goalPct > 0 ? ' 🤨' : goalPct < -15 ? ' 😳' : ' 👌'}
           </motion.span>
         ) : (
-          <span className="text-muted">Le % s’affichera après ta première pesée ⚖️</span>
+          <span className="text-muted">Le&nbsp;% s’affichera après ta première pesée ⚖️</span>
         )}
       </div>
 
@@ -172,7 +177,7 @@ export function GoalSection({ index }: { index: number }) {
         )}
       </AnimatePresence>
 
-      {(me.goalKg !== null || upcoming?.payload.goalKg) && !(pending && pending.payload.goalKg === null) && (
+      {nextGoal !== null && !pending?.payload.clear && (
         <div className="mt-3 text-center">
           <button
             type="button"
@@ -187,7 +192,8 @@ export function GoalSection({ index }: { index: number }) {
 
       {other.goalFromStartPct !== null && (
         <Note emoji="👀">
-          {other.name} vise <b>{formatPct(other.goalFromStartPct)}</b> depuis son départ. On compare en %, c’est plus juste.
+          {other.name} vise <b>{formatPct(other.goalFromStartPct)}</b> depuis son départ. On compare en&nbsp;%, c’est plus
+          juste.
         </Note>
       )}
     </Section>

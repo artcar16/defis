@@ -4,10 +4,11 @@
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useId, useState } from 'react'
 import { AVATAR_EMOJIS, PLAYER_COLORS } from '../../config/defaults'
+import { deName } from '../../core/fr'
 import { useDuel } from '../../data/DuelProvider'
+import { deep } from '../../ui/color'
 import { Avatar, springy } from '../../ui/kit'
 import { useToast } from '../../ui/toast'
-import { deName } from './format'
 import { EmojiGrid, Label, Section, TextField, Toggle, useAction } from './ui'
 
 const NAME_MAX = 20
@@ -88,11 +89,11 @@ export function ProfileSection({ index }: { index: number }) {
           </motion.div>
         </AnimatePresence>
         <div className="min-w-0 flex-1">
-          <div className="truncate font-display text-[26px] leading-tight font-bold" style={{ color: `color-mix(in oklab, ${me.color} 75%, var(--color-ink))` }}>
+          <div className="truncate font-display text-[26px] leading-tight font-bold" style={{ color: deep(me.color) }}>
             {preview.name}
           </div>
           <div className="mt-0.5 text-[15px] font-semibold text-ink-soft">
-            {me.emoji} vs {other.emoji} — prêt·e à en découdre ?
+            {me.emoji} contre {other.emoji} — prêt·e à en découdre&nbsp;?
           </div>
         </div>
       </div>
@@ -182,7 +183,7 @@ export function ProfileSection({ index }: { index: number }) {
             )
           }
           label={`Montrer mes kilos à ${other.name}`}
-          description={me.showKg ? `${other.name} voit tes pesées en kg` : `Sinon, ${other.name} ne voit que tes % 🤫`}
+          description={me.showKg ? `${other.name} voit tes pesées en kg` : `Sinon, ${other.name} ne voit que tes\u00a0% 🤫`}
         />
       </div>
     </Section>

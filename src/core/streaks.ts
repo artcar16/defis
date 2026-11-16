@@ -62,6 +62,8 @@ export interface StreakScan extends StreakInfo {
    * (une série de 14 jours compte 2 fois pour un objectif de 7).
    */
   blocks: number
+  /** Le dernier jour de chacun de ces blocs, dans l'ordre (blockDays.length === blocks). */
+  blockDays: DayKey[]
 }
 
 /**
@@ -73,7 +75,7 @@ export function scanStreak(from: DayKey, today: DayKey, judge: (day: DayKey) => 
   let record = 0
   let recordEnd: DayKey | null = null
   let reachedOn: DayKey | null = null
-  let blocks = 0
+  const blockDays: DayKey[] = []
   for (const day of daysRange(from, today)) {
     const verdict = judge(day)
     if (verdict === 'skip') continue
@@ -84,7 +86,7 @@ export function scanStreak(from: DayKey, today: DayKey, judge: (day: DayKey) => 
         recordEnd = day
       }
       if (target !== undefined && target > 0 && run % target === 0) {
-        blocks++
+        blockDays.push(day)
         reachedOn ??= day
       }
     } else if (!(day === today && (verdict === 'empty' || verdict === 'pending'))) {
@@ -92,7 +94,7 @@ export function scanStreak(from: DayKey, today: DayKey, judge: (day: DayKey) => 
     }
   }
   // Aujourd'hui en attente ne remet pas `run` à zéro : c'est la série en cours.
-  return { current: run, record, recordEnd, reachedOn, blocks }
+  return { current: run, record, recordEnd, reachedOn, blocks: blockDays.length, blockDays }
 }
 
 /** Verdict d'un jour pour une habitude : Nickel / Fait = réussi. */

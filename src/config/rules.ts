@@ -3,6 +3,8 @@
  *
  * Toute la logique de score (src/core) lit ces valeurs : changer un nombre ici
  * change le calcul partout (Ring, résultats, stats, badges, tests).
+ * La date de début du duel (SEASON_START), les joueurs, habitudes et gages de départ
+ * sont dans src/config/defaults.ts.
  * Pense à mettre SPEC.md à jour si tu changes une règle.
  */
 export const RULES = {
@@ -53,7 +55,10 @@ export const RULES = {
 
   /** Enjeu de la semaine (le gage). */
   stake: {
-    /** Tirage automatique à la roulette au début de la manche s'il n'y a pas d'enjeu. */
+    /**
+     * Tirage automatique à la roulette au début de la manche s'il n'y a pas d'enjeu
+     * (décision 4). Lu par la source de données, qui tire avec drawStake() (core/stake.ts).
+     */
     autoDrawOnMonday: true,
     /** L'enjeu reste modifiable pendant ce nombre de jours (1 = le lundi seulement). */
     editableDays: 1,
@@ -64,6 +69,7 @@ export const RULES = {
    * poids objectif) : proposés par l'un, acceptés par l'autre, effectifs le lundi suivant.
    */
   proposals: {
+    /** Faux = une proposition est acceptée d'office (lu par la source de données). */
     requireApproval: true,
   },
 

@@ -5,12 +5,13 @@
 import { motion, useReducedMotion } from 'motion/react'
 import { useMemo, useState, type CSSProperties, type MouseEvent } from 'react'
 import { addDays, ISO_DAY_SHORT, weekEndOf, weekStartOf } from '../../core/dates'
+import { frDate, frDayMonth, NBSP, plural, pluralWord } from '../../core/fr'
 import type { CheckinIndex } from '../../core/scoring'
 import { habitCalendar, habitStreak, type CalendarCell, type DayStatus } from '../../core/streaks'
 import type { DayKey, Habit, Player } from '../../core/types'
+import { deep, tint } from '../../ui/color'
 import { Card, springy, VALUE_COLORS, VALUE_LABELS } from '../../ui/kit'
 import { PlayerToggle } from './bits'
-import { deep, mediumDay, plural, shortDay, tint } from './format'
 
 /** Nombre de semaines affichées (au plus). */
 const WEEKS_SHOWN = 5
@@ -24,6 +25,9 @@ function statusInfo(status: DayStatus, isToday = false): { emoji: string; label:
 }
 
 const isWin = (status: DayStatus) => status === 'nickel' || status === 'fait'
+
+/** « mar. 10 nov. », « dim. 1er nov. » */
+const cellDay = (day: DayKey) => frDate(day, { weekday: 'EEE', month: 'MMM' })
 
 // ─── Une case ────────────────────────────────────────────────────────────────
 
@@ -49,7 +53,7 @@ function Cell({ cell, today, color, selected }: { cell: CalendarCell; today: Day
   }
   if (selected) style.transform = 'scale(1.12)'
   return (
-    <div role="img" aria-label={`${mediumDay(cell.day)} : ${statusInfo(cell.status, isToday).label}`} data-day={cell.day} className={className} style={style}>
+    <div role="img" aria-label={`${cellDay(cell.day)}${NBSP}: ${statusInfo(cell.status, isToday).label}`} data-day={cell.day} className={className} style={style}>
       {value ? (
         <span aria-hidden="true" className="drop-shadow-[0_1px_1px_rgb(0_0_0/0.18)]">
           {VALUE_LABELS[value].emoji}
@@ -78,7 +82,7 @@ function StreakBadge({ emoji, value, label, hot, gold }: { emoji: string; value:
   const reduced = useReducedMotion() ?? false
   return (
     <div
-      className="flex min-w-[58px] flex-col items-center rounded-2xl px-2 py-1.5"
+      className="flex min-w-[58px] flex-col items-center rounded-2xl px-2 py-1.5 @max-[320px]:flex-1 @max-[320px]:flex-row @max-[320px]:justify-center @max-[320px]:gap-2"
       style={
         gold
           ? { background: 'color-mix(in oklab, var(--color-gold) 26%, var(--color-surface))', boxShadow: 'inset 0 0 0 2px var(--color-gold)' }
@@ -96,7 +100,7 @@ function StreakBadge({ emoji, value, label, hot, gold }: { emoji: string; value:
         </motion.span>
         <span className="score-num text-[20px] leading-none text-ink">{value}</span>
       </div>
-      <span className="mt-0.5 text-[11px] font-extrabold tracking-wide text-muted uppercase">{label}</span>
+      <span className="mt-0.5 text-[11px] font-extrabold tracking-wide text-muted uppercase @max-[320px]:mt-0">{label}</span>
     </div>
   )
 }
@@ -114,8 +118,13 @@ function HabitCalendarCard({ view, player, today, from }: { view: HabitView; pla
   }
 
   return (
-    <Card className="px-3.5 pt-3.5 pb-3">
-      <div className="flex items-center gap-3">
+    <Card className="@container px-3.5 pt-3.5 pb-3">
+      {/*
+       * En-tête : pastille, nom, série et record sur une ligne. Si la carte est étroite
+       * (iPhone SE), série et record passent dessous plutôt que de couper le nom.
+       * Le nom (24 caractères au plus) passe à la ligne au lieu d'être tronqué.
+       */}
+      <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-2.5 @max-[320px]:grid-cols-[auto_minmax(0,1fr)]">
         <span
           className="grid size-14 shrink-0 place-items-center rounded-[1.1rem] text-[34px] leading-none"
           style={{ background: tint(player.color, 16) }}
@@ -123,13 +132,15 @@ function HabitCalendarCard({ view, player, today, from }: { view: HabitView; pla
         >
           {habit.emoji}
         </span>
-        <div className="min-w-0 flex-1">
-          <h3 className="truncate font-display text-[19px] leading-tight font-semibold text-ink">{habit.name}</h3>
-          <p className="truncate text-[14px] font-semibold text-muted" title={habit.hint || undefined}>
+        <div className="min-w-0">
+          <h3 className="font-display text-[19px] leading-tight font-semibold text-balance text-ink hyphens-auto [overflow-wrap:anywhere]">
+            {habit.name}
+          </h3>
+          <p className="text-[14px] font-semibold text-muted" title={habit.hint || undefined}>
             {habit.kind === 'avoid' ? '🙅 À éviter' : '✊ À faire'}
           </p>
         </div>
-        <div className="flex shrink-0 gap-1.5">
+        <div className="flex gap-1.5 @max-[320px]:col-span-2">
           <StreakBadge emoji="🔥" value={current} label="série" hot={current >= 3} />
           <StreakBadge emoji="🏆" value={record} label="record" gold={isRecord} />
         </div>
@@ -137,7 +148,7 @@ function HabitCalendarCard({ view, player, today, from }: { view: HabitView; pla
 
       {startsLater ? (
         <p className="mt-3 rounded-2xl bg-sunken px-3 py-2.5 text-center text-[15px] font-semibold text-ink-soft">
-          🆕 Nouvelle habitude : elle compte à partir du {mediumDay(habit.activeFrom)}
+          🆕 Nouvelle habitude{NBSP}: elle compte à partir du {frDate(habit.activeFrom)}
         </p>
       ) : (
         <>
@@ -151,7 +162,7 @@ function HabitCalendarCard({ view, player, today, from }: { view: HabitView; pla
           <div
             className="mt-1 grid grid-cols-7 gap-1.5 px-0.5"
             role="group"
-            aria-label={`Calendrier ${habit.name} depuis le ${mediumDay(from)}`}
+            aria-label={`Calendrier ${habit.name} depuis le ${cellDay(from)}`}
             onClick={onGridClick}
           >
             {cells.map((c) => (
@@ -162,14 +173,17 @@ function HabitCalendarCard({ view, player, today, from }: { view: HabitView; pla
           <div className="mt-2.5 flex min-h-6 items-center justify-between gap-2 px-1 text-[14px] font-semibold">
             {pickedCell ? (
               <motion.span key={pickedCell.day} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={springy} className="text-ink">
-                {mediumDay(pickedCell.day)} · {statusInfo(pickedCell.status, pickedCell.day === today).emoji}{' '}
+                {cellDay(pickedCell.day)} · {statusInfo(pickedCell.status, pickedCell.day === today).emoji}{' '}
                 {statusInfo(pickedCell.status, pickedCell.day === today).label}
               </motion.span>
             ) : (
               <span className="text-muted">
                 {counted > 0 ? (
                   <>
-                    <span className="text-ink-soft">{plural(ok, 'jour')} réussi{ok > 1 ? 's' : ''}</span> sur {counted}
+                    <span className="text-ink-soft">
+                      {plural(ok, 'jour')} {pluralWord(ok, 'réussi')}
+                    </span>{' '}
+                    sur {counted}
                   </>
                 ) : (
                   'Rien à juger pour l’instant 🤷'
@@ -178,7 +192,7 @@ function HabitCalendarCard({ view, player, today, from }: { view: HabitView; pla
             )}
             {isRecord && current >= 3 && !pickedCell && (
               <span className="shrink-0 font-display font-semibold" style={{ color: deep('var(--color-gold-dark)', 85) }}>
-                Record en cours ! 🏆
+                Record en cours{NBSP}! 🏆
               </span>
             )}
           </div>
@@ -241,7 +255,7 @@ export function HabitCalendars({
   return (
     <div className="space-y-3">
       <PlayerToggle
-        label="Calendrier de qui ?"
+        label={`Calendrier de qui${NBSP}?`}
         value={player.id}
         onChange={setWho}
         options={[
@@ -272,7 +286,7 @@ export function HabitCalendars({
         ))
       )}
       <p className="px-2 text-center text-[13px] font-semibold text-muted">
-        {shortDay(from)} → {shortDay(to)} · touche une case pour le détail 👆
+        {frDayMonth(from)} → {frDayMonth(to)} · touche une case pour le détail 👆
       </p>
     </div>
   )

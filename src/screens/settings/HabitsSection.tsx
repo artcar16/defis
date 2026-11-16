@@ -8,10 +8,12 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useId, useState } from 'react'
 import { HABIT_EMOJIS, HABIT_IDEAS } from '../../config/defaults'
 import { nextMonday } from '../../core/dates'
+import { capitalize, deName } from '../../core/fr'
 import type { DayKey, Habit, HabitKind, Player, Proposal } from '../../core/types'
 import { useDuel } from '../../data/DuelProvider'
+import { deep, tint } from '../../ui/color'
 import { Button, Pill, springy } from '../../ui/kit'
-import { KIND_EMOJI, KIND_LABEL, KIND_SCALE, capitalize, deName, fromLabel, tint } from './format'
+import { KIND_EMOJI, KIND_LABEL, KIND_SCALE, fromLabel } from './format'
 import { useDescribe } from './useDescribe'
 import { Collapsible, EmojiGrid, Label, MiniButton, Note, Section, Segmented, StatusLine, TextField, useAction } from './ui'
 
@@ -50,7 +52,7 @@ export function HabitsSection({ index }: { index: number }) {
       index={index}
       emoji="📋"
       title="Mes habitudes"
-      subtitle="Nom et emoji : immédiat. Les règles : à deux, dès lundi."
+      subtitle="Nom et emoji&nbsp;: immédiat. Les règles&nbsp;: à deux, dès lundi."
     >
       <div className="flex flex-col gap-2.5">
         {mine.map((h) => (
@@ -66,7 +68,7 @@ export function HabitsSection({ index }: { index: number }) {
         ))}
         {mine.length === 0 && myPendingAdds.length === 0 && (
           <p className="rounded-3xl bg-sunken px-4 py-5 text-center text-[15px] font-semibold text-muted">
-            Aucune habitude… un peu trop facile, non ? 🤔
+            Aucune habitude… un peu trop facile, non&nbsp;? 🤔
           </p>
         )}
       </div>
@@ -83,10 +85,11 @@ export function HabitsSection({ index }: { index: number }) {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             whileTap={{ scale: 0.97 }}
-            className="mt-3 flex min-h-14 w-full items-center justify-center gap-2 rounded-3xl border-[3px] border-dashed font-display text-[17px] font-semibold"
-            style={{ borderColor: tint(me.color, 45, 'var(--color-line)'), color: `color-mix(in oklab, ${me.color} 75%, var(--color-ink))` }}
+            className="mt-3 flex min-h-14 w-full items-center justify-center gap-2 rounded-3xl border-[3px] border-dashed px-4 py-2 text-center font-display text-[17px] leading-snug font-semibold text-balance"
+            style={{ borderColor: tint(me.color, 45, 'var(--color-line)'), color: deep(me.color) }}
           >
-            <span aria-hidden="true">➕</span> Proposer une nouvelle habitude
+            <span aria-hidden="true">➕</span>
+            <span>Proposer une nouvelle habitude</span>
           </motion.button>
         )}
       </AnimatePresence>
@@ -106,7 +109,7 @@ export function HabitsSection({ index }: { index: number }) {
               </span>
               <div className="min-w-0 flex-1">
                 <div className="font-display text-[17px] leading-tight font-semibold text-ink">{h.name}</div>
-                {h.hint && <div className="truncate text-[15px] text-muted">{h.hint}</div>}
+                {h.hint && <div className="text-[15px] leading-snug text-muted">{h.hint}</div>}
                 <HabitPills habit={h} today={today} />
               </div>
             </div>
@@ -179,7 +182,7 @@ function HabitRow({ habit, open, onToggle }: { habit: Habit; open: boolean; onTo
         </motion.span>
         <span className="min-w-0 flex-1">
           <span className="block font-display text-[18px] leading-tight font-semibold text-ink">{habit.name}</span>
-          {habit.hint && <span className="block truncate text-[15px] text-muted">{habit.hint}</span>}
+          {habit.hint && <span className="block text-[15px] leading-snug text-muted">{habit.hint}</span>}
           <HabitPills habit={habit} today={today} pending={!!pending} />
         </span>
         <motion.span
@@ -252,7 +255,7 @@ function HabitEditor({ habit, pending }: { habit: Habit; pending: Proposal | nul
         enterKeyHint="done"
       />
       <Label>Emoji</Label>
-      <EmojiGrid emojis={emojis} value={emoji} onPick={setEmoji} label={`Emoji de ${habit.name}`} color={me.color} />
+      <EmojiGrid emojis={emojis} value={emoji} onPick={setEmoji} label={`Emoji pour ${habit.name}`} color={me.color} />
       <AnimatePresence initial={false} mode="wait">
         {dirty ? (
           <motion.div key="save" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }} transition={springy}>
@@ -262,7 +265,7 @@ function HabitEditor({ habit, pending }: { habit: Habit; pending: Proposal | nul
           </motion.div>
         ) : (
           <motion.p key="hint" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="mt-3 px-1 text-center text-[15px] text-muted">
-            ✏️ Nom, précision, emoji : c’est cosmétique, effet immédiat
+            ✏️ Nom, précision, emoji&nbsp;: c’est cosmétique, effet immédiat
           </motion.p>
         )}
       </AnimatePresence>
@@ -286,9 +289,10 @@ function HabitEditor({ habit, pending }: { habit: Habit; pending: Proposal | nul
           {describe(pending).title} — en attente {deName(other.name)}
         </StatusLine>
       ) : upcoming ? (
-        <Note emoji="🆕">Elle démarre {fromLabel(habit.activeFrom)}. Les règles se renégocieront après 😉</Note>
+        // fromLabel finit souvent par « nov. » : pas de point juste après (sinon « nov.. »).
+        <Note emoji="🆕">Elle compte {fromLabel(habit.activeFrom)}, les règles se renégocieront après 😉</Note>
       ) : ending && habit.activeUntil ? (
-        <Note emoji="👋">Désactivée {fromLabel(habit.activeUntil)}. Plus rien à négocier.</Note>
+        <Note emoji="👋">Plus rien à négocier&nbsp;: désactivée {fromLabel(habit.activeUntil)}</Note>
       ) : (
         <div className="mt-2 flex flex-col gap-3">
           <Button
@@ -297,7 +301,7 @@ function HabitEditor({ habit, pending }: { habit: Habit; pending: Proposal | nul
             disabled={busy}
             onClick={() => proposeRule({ kind: 'habit_kind', habitId: habit.id, habitKind: otherKind })}
           >
-            🔄 Passer en « {KIND_LABEL[otherKind]} »
+            🔄 Passer en «&nbsp;{KIND_LABEL[otherKind]}&nbsp;»
           </Button>
           <Button variant="soft" block disabled={busy} onClick={() => proposeRule({ kind: 'habit_disable', habitId: habit.id })}>
             👋 Désactiver
@@ -321,20 +325,23 @@ function PendingAddRow({ proposal, other }: { proposal: Proposal; other: Player 
       layout
       initial={{ opacity: 0, scale: 0.95 }}
       animate={{ opacity: 1, scale: 1 }}
-      className="flex items-center gap-3 rounded-3xl border-[3px] border-dashed border-line px-3 py-3"
+      // flex-wrap : sur iPhone SE, « Annuler » passe dessous au lieu d'écraser le texte.
+      className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-3xl border-[3px] border-dashed border-line px-3 py-3"
     >
       <span className="grid size-14 shrink-0 place-items-center rounded-2xl bg-sunken text-[32px] leading-none opacity-70" aria-hidden="true">
         {pl.emoji}
       </span>
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 basis-32">
         <div className="font-display text-[18px] leading-tight font-semibold text-ink">{pl.name}</div>
         <div className="text-[15px] leading-snug text-muted">
           ⏳ {capitalize(KIND_LABEL[pl.habitKind])} · en attente {deName(other.name)}
         </div>
       </div>
-      <MiniButton onClick={() => void run(() => source.cancelProposal(proposal.id), 'Proposition annulée 🙅')} disabled={busy}>
-        Annuler
-      </MiniButton>
+      <span className="ml-auto">
+        <MiniButton onClick={() => void run(() => source.cancelProposal(proposal.id), 'Proposition annulée 🙅')} disabled={busy}>
+          Annuler
+        </MiniButton>
+      </span>
     </motion.div>
   )
 }
@@ -392,7 +399,7 @@ function AddHabitForm({ existing, onDone }: { existing: Habit[]; onDone: () => v
 
       {ideas.length > 0 && (
         <>
-          <Label>Des idées ?</Label>
+          <Label>Des idées&nbsp;?</Label>
           <div className="flex flex-wrap gap-2">
             {ideas.map((i) => {
               const active = sameName(i.name, cleanName) && emoji === i.emoji
@@ -433,7 +440,7 @@ function AddHabitForm({ existing, onDone }: { existing: Habit[]; onDone: () => v
       />
       {duplicate && (
         <p className="mt-1.5 px-1 text-[15px] font-semibold" style={{ color: 'var(--color-craquage)' }}>
-          Tu as déjà « {cleanName} » 😉
+          Tu as déjà «&nbsp;{cleanName}&nbsp;» 😉
         </p>
       )}
       <Label htmlFor={hintId}>Précision (facultatif)</Label>

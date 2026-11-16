@@ -13,6 +13,7 @@ import { RingScreen } from './screens/RingScreen'
 import { SettingsScreen } from './screens/SettingsScreen'
 import { StatsScreen } from './screens/StatsScreen'
 import { WeighInSheet } from './screens/WeighInSheet'
+import { onColor } from './ui/color'
 import { NavProvider, useNav, type TabId } from './ui/nav'
 import { TabBar } from './ui/TabBar'
 import { ToastProvider, useToast } from './ui/toast'
@@ -25,32 +26,61 @@ const SCREENS: Record<TabId, () => React.JSX.Element> = {
   settings: SettingsScreen,
 }
 
+/** Variables de couleur des joueurs : couleur brute, et fond + encre lisibles d'un bouton. */
+function playerVars(meColor: string, otherColor: string): Record<string, string> {
+  const meBtn = onColor(meColor)
+  const otherBtn = onColor(otherColor)
+  return {
+    '--me': meColor,
+    '--other': otherColor,
+    '--me-btn': meBtn.bg,
+    '--me-ink': meBtn.ink,
+    '--other-btn': otherBtn.bg,
+    '--other-ink': otherBtn.ink,
+  }
+}
+
 function Shell() {
   const { me, other, signedIn, season, snapshot, lastActivity, playerById } = useDuel()
-  const { tab, sheet, openSheet, closeSheet } = useNav()
+  const { tab, setTab, sheet, openSheet, closeSheet } = useNav()
   const toast = useToast()
 
-  // Toast quand l'adversaire fait quelque chose (temps réel).
+  // Toast quand l'adversaire fait quelque chose (temps réel). Jamais l'écho de mes propres actions.
   const lastShown = useRef(0)
   useEffect(() => {
     if (!lastActivity || lastActivity.at === lastShown.current) return
     lastShown.current = lastActivity.at
+    if (lastActivity.playerId === me.id) return
     toast({ text: lastActivity.text, color: playerById(lastActivity.playerId).color })
-  }, [lastActivity, toast, playerById])
+  }, [lastActivity, toast, playerById, me.id])
 
   // La cérémonie des résultats s'ouvre toute seule à la première visite après la fin de la manche.
-  // (ResultsSheet la marque « vue » dès son ouverture, donc elle ne se rouvre pas.)
+  // ResultsSheet la marque « vue » ; en attendant (écriture lente, hors ligne), on retient ici
+  // les manches déjà ouvertes pour ne pas la rouvrir en boucle quand on la ferme.
   const pendingWeek = signedIn ? (pendingResultsWeek(season, snapshot.seenResults)?.weekStart ?? null) : null
+  const autoOpened = useRef(new Set<string>())
   useEffect(() => {
-    if (pendingWeek && !sheet) openSheet({ kind: 'results', weekStart: pendingWeek, auto: true })
-  }, [pendingWeek, sheet, openSheet])
+    // Vue et confirmée par la source : on oublie (« Revoir la cérémonie » de la démo la rouvre).
+    if (!pendingWeek) return autoOpened.current.clear()
+    if (sheet) return
+    const key = `${me.id}|${pendingWeek}`
+    if (autoOpened.current.has(key)) return
+    autoOpened.current.add(key)
+    openSheet({ kind: 'results', weekStart: pendingWeek, auto: true })
+  }, [pendingWeek, sheet, openSheet, me.id])
 
-  const vars = { ['--me' as string]: me.color, ['--other' as string]: other.color } as CSSProperties
+  // Au moment de se connecter, on arrive sur le Ring (pas sur l'onglet de la déconnexion).
+  const wasSignedIn = useRef(signedIn)
+  useEffect(() => {
+    if (signedIn && !wasSignedIn.current) setTab('ring')
+    wasSignedIn.current = signedIn
+  }, [signedIn, setTab])
+
+  const vars = playerVars(me.color, other.color) as CSSProperties
   // Aussi sur <html>, pour ce qui est rendu dans un portail (feuilles, célébrations).
   useEffect(() => {
     const root = document.documentElement.style
-    root.setProperty('--me', me.color)
-    root.setProperty('--other', other.color)
+    for (const [name, value] of Object.entries(playerVars(me.color, other.color))) root.setProperty(name, value)
   }, [me.color, other.color])
 
   if (!signedIn) {

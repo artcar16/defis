@@ -3,8 +3,24 @@
  * - Maquette : DemoSource (données fictives, en mémoire + localStorage).
  * - Étapes 4-5 : SupabaseSource (même interface, données réelles + temps réel).
  * Les écrans ne connaissent que cette interface.
+ *
+ * Garanties qu'une source DOIT tenir (les écrans en dépendent) :
+ * 1. Mise à jour optimiste : chaque action applique son effet au snapshot local et
+ *    notifie les abonnés AVANT de résoudre sa promesse. En cas d'échec, elle annule
+ *    l'effet, notifie, puis rejette avec un message en français prêt à afficher.
+ * 2. Le snapshot contient toujours exactement 2 joueurs et un `meId` valide.
+ * 3. Le snapshot est déjà filtré pour le joueur connecté : kilos de l'autre (pesées,
+ *    objectif, propositions d'objectif) à null, sauf si l'autre a choisi de les montrer.
+ * 4. `activity` ne signale que ce qu'a fait l'AUTRE joueur (jamais l'écho de mes actions).
+ * 5. Une manche commencée a toujours un enjeu : s'il manque et que
+ *    RULES.stake.autoDrawOnMonday est vrai, la source le tire avec drawStake()
+ *    (core/stake.ts, tirage déterministe : les deux téléphones tirent le même gage).
+ * 6. Une seule proposition en attente par auteur et par sujet : proposer à nouveau
+ *    (même `kind`, et même habitude pour habit_disable / habit_kind) remplace l'ancienne.
+ *    Si RULES.proposals.requireApproval est faux, la proposition est acceptée d'office.
  */
 import type {
+  BadgeUnlock,
   CheckinValue,
   DayKey,
   DuelSnapshot,
@@ -36,6 +52,12 @@ export type HabitLookPatch = Partial<Pick<Habit, 'name' | 'emoji' | 'hint'>>
 
 export interface DuelSource {
   readonly mode: 'demo' | 'supabase'
+  /** Le joueur est-il connecté ? (notifié via subscribe quand ça change) */
+  readonly signedIn: boolean
+  /** Connexion email + mot de passe (rejette avec un message en français). */
+  signIn(email: string, password: string): Promise<void>
+  /** Coupe tout (temps réel, minuteurs) : la source n'est plus utilisée. */
+  dispose(): void
   /** Données actuelles (déjà filtrées pour le joueur connecté : kilos de l'autre masqués). */
   getSnapshot(): DuelSnapshot
   /** Écoute les changements (temps réel). Renvoie la fonction de désabonnement. */
@@ -64,16 +86,28 @@ export interface DuelSource {
   setGagePaid(weekStart: DayKey, playerId: PlayerId, paid: boolean): Promise<void>
   /** La cérémonie de cette manche a été vue. */
   markResultsSeen(weekStart: DayKey): Promise<void>
+  /** Enregistre des badges débloqués par le joueur connecté (voir badgeUnlocksToRecord). */
+  recordBadgeUnlocks(unlocks: BadgeUnlock[]): Promise<void>
+  /** Ces célébrations de badges ont été vues par le joueur connecté. */
+  markBadgesSeen(keys: string[]): Promise<void>
   signOut(): Promise<void>
 }
 
 /** Commandes réservées à la maquette (panneau 🧪 Démo dans les réglages). */
 export interface DemoControls {
+  /** « Jouer en tant que » (écran de connexion de la démo). */
+  signInAs(playerId: PlayerId): void
+  /** Jours où l'on peut voyager : la vraie semaine + le lundi suivant. */
+  travelDays(): DayKey[]
   /** Jouer en tant que l'autre joueur. */
   switchPlayer(playerId: PlayerId): void
   /** Simule le check-in de l'adversaire (pour voir le Ring bouger + le toast). */
   simulateOtherCheckin(): void
-  /** Voyage dans le temps : choisit le jour « aujourd'hui » de la démo (régénère les données). */
+  /**
+   * Voyage dans le temps : choisit le jour « aujourd'hui » de la démo. Garde tout ce que
+   * le joueur a fait ; seuls les jours manquants sont inventés (et pas hier pour moi, pour
+   * pouvoir montrer le rattrapage). Revenir en arrière efface ce qui est après le jour choisi.
+   */
   setToday(day: DayKey): void
   /** Le jour réel de la démo. */
   realToday(): DayKey

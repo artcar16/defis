@@ -1,31 +1,32 @@
 /**
- * Petits formatages en français pour le Ring (pluriels, dates, activité).
+ * Petits textes propres au Ring (le reste du français partagé est dans core/fr.ts).
  */
-import { formatDay } from '../../core/dates'
+import { diffDays, formatDay } from '../../core/dates'
+import { NBSP, pluralWord } from '../../core/fr'
 import type { DayKey } from '../../core/types'
 import type { Activity } from '../../data/source'
 
-/** « 1 jour », « 3 jours » : pluriel français (0 et 1 au singulier). */
-export function plural(n: number, singular: string, pluralForm = `${singular}s`): string {
-  return `${n} ${Math.abs(n) >= 2 ? pluralForm : singular}`
-}
-
 /** « 4 jours restants », « 1 jour restant ». */
 export function daysLeftLabel(n: number): string {
-  return n >= 2 ? `${n} jours restants` : `${n} jour restant`
+  return `${n}${NBSP}${pluralWord(n, 'jour')} ${pluralWord(n, 'restant')}`
 }
 
-/** « 16 novembre », « 1er novembre ». */
-export function prettyDay(day: DayKey): string {
-  const d = formatDay(day, 'd')
-  return `${d === '1' ? '1er' : d} ${formatDay(day, 'MMMM')}`
+/** Salut du Ring selon l'heure : « Bonjour, Laetitia 👋 », « Encore debout, Arthus ? 👋 » la nuit. */
+export function greetingLine(hour: number, name: string): string {
+  if (hour < 5) return `Encore debout, ${name}${NBSP}? 👋`
+  const hello = hour < 12 ? 'Bonjour' : hour < 18 ? 'Salut' : 'Bonsoir'
+  return `${hello}, ${name} 👋`
 }
 
-/** « du 16 au 22 novembre », « du 26 octobre au 1er novembre ». */
-export function weekRange(start: DayKey, end: DayKey): string {
-  const sameMonth = formatDay(start, 'MM') === formatDay(end, 'MM')
-  const from = sameMonth ? (formatDay(start, 'd') === '1' ? '1er' : formatDay(start, 'd')) : prettyDay(start)
-  return `du ${from} au ${prettyDay(end)}`
+/**
+ * Jusqu'à quand l'enjeu reste modifiable (dernier jour inclus, jusqu'à 23:59), vu d'aujourd'hui :
+ * « minuit », « demain soir », « mercredi soir ». Se lit après « jusqu’à » ou « d’ici ».
+ */
+export function deadlineLabel(lastDay: DayKey, today: DayKey): string {
+  const n = diffDays(today, lastDay)
+  if (n <= 0) return 'minuit'
+  if (n === 1) return `demain${NBSP}soir`
+  return `${formatDay(lastDay, 'EEEE')}${NBSP}soir`
 }
 
 /** L'emoji qui « sort » de l'avatar de l'adversaire quand il fait quelque chose en direct. */

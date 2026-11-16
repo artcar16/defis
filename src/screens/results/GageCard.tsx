@@ -4,12 +4,14 @@
  */
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useState } from 'react'
+import { deName, NBSP } from '../../core/fr'
 import type { Player } from '../../core/types'
 import { useDuel } from '../../data/DuelProvider'
+import { deep, themeColor } from '../../ui/color'
 import { burst } from '../../ui/confetti'
+import { errorText } from '../../ui/format'
 import { Avatar, Button, Card } from '../../ui/kit'
 import { useToast } from '../../ui/toast'
-import { deName, deep, tokenColor } from '../weighin/format'
 import type { WeekResults } from './useWeekResults'
 
 export function GageCard({ results }: { results: WeekResults }) {
@@ -45,7 +47,7 @@ export function GageCard({ results }: { results: WeekResults }) {
         </div>
       ) : (
         <p className="mt-3 text-[15px] font-semibold text-ink-soft">
-          Le perdant s’y collera lundi 😈 (et en cas d’égalité, gage pour les deux !)
+          Qui perd s’y collera lundi 😈 (et en cas d’égalité, gage pour les deux{NBSP}!)
         </p>
       )}
     </Card>
@@ -77,13 +79,13 @@ function GageRow({
     try {
       await source.setGagePaid(weekStart, payer.id, value)
       if (value) {
-        burst([tokenColor('--color-nickel', '#22c55e'), tokenColor('--color-gold', '#ffc23d'), payer.color], { x: 0.5, y: 0.7 })
+        burst([themeColor('nickel', '#22c55e'), themeColor('gold', '#ffc23d'), payer.color], { x: 0.5, y: 0.7 })
         toast({ text: `🫡 Gage ${deName(payer.name)} validé ✅`, color: 'var(--color-nickel)' })
       } else {
         toast({ text: '↩️ Validation annulée', color: validator.color })
       }
     } catch (e) {
-      toast({ text: e instanceof Error ? e.message : 'Oups, ça n’a pas marché 😕', color: 'var(--color-craquage)' })
+      toast({ text: errorText(e, 'Oups, ça n’a pas marché 😕'), color: 'var(--color-craquage)' })
     } finally {
       setBusy(false)
     }
@@ -109,10 +111,10 @@ function GageRow({
           <motion.div key="paid" className="mt-3 flex items-center justify-between gap-3" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             {/* Tampon « payé » */}
             <motion.span
-              className="inline-flex -rotate-6 items-center rounded-[14px] border-[3px] px-3 py-1 font-display text-[18px] font-bold tracking-wide uppercase"
+              className="inline-flex shrink-0 -rotate-6 items-center rounded-[14px] border-[3px] px-2.5 py-1 font-display text-[17px] font-bold tracking-wide whitespace-nowrap uppercase"
               style={{
                 borderColor: 'var(--color-nickel)',
-                color: 'color-mix(in oklab, var(--color-nickel) 70%, var(--color-ink))',
+                color: deep('var(--color-nickel)', 70),
                 background: 'color-mix(in oklab, var(--color-nickel) 12%, transparent)',
               }}
               initial={reduced ? false : { scale: 2.2, opacity: 0, rotate: -20 }}
@@ -131,7 +133,7 @@ function GageRow({
                 Annuler
               </button>
             ) : (
-              <span className="text-right text-[13px] font-semibold text-muted">validé par {validator.name}</span>
+              <span className="min-w-0 text-right text-[13px] font-semibold text-muted">validé par {validator.name}</span>
             )}
           </motion.div>
         ) : iValidate ? (

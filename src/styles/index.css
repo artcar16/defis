@@ -110,6 +110,10 @@
   h1, h2, h3, h4 {
     font-family: var(--font-display);
   }
+  /* Une ancre (#enjeu, #propositions…) atteinte par défilement ne se cache pas sous l'encoche. */
+  [id] {
+    scroll-margin-top: calc(max(env(safe-area-inset-top), 12px) + 12px);
+  }
 }
 
 @layer components {
@@ -129,11 +133,12 @@
 
   /*
    * Bouton « chunky » façon jeu mobile : bord inférieur plus foncé qui s'écrase au tap.
-   * Couleur via --btn (par défaut la couleur du joueur connecté).
+   * Couleur via --btn / --btn-ink. Par défaut, la couleur du joueur connecté en version
+   * lisible (--me-btn / --me-ink, posées par App.tsx d'après onColor() de ui/color.ts).
    */
   .btn-chunky {
-    --btn: var(--me, var(--color-coral));
-    --btn-ink: #fff;
+    --btn: var(--me-btn, var(--me, var(--color-coral)));
+    --btn-ink: var(--me-ink, #fff);
     position: relative;
     display: inline-flex;
     align-items: center;
@@ -179,14 +184,18 @@
     font-variant-numeric: tabular-nums;
     letter-spacing: -0.02em;
   }
+}
 
-  /* Marges de sécurité iPhone (encoche + barre du bas). */
-  .safe-top {
-    padding-top: max(env(safe-area-inset-top), 12px);
-  }
-  .safe-bottom {
-    padding-bottom: max(env(safe-area-inset-bottom), 12px);
-  }
+/*
+ * Marges de sécurité iPhone (encoche + barre du bas). Ce sont des utilitaires (et non des
+ * composants) : déclarés après pt-* / pb-* / py-* / p-* dans la couche utilities, ils ne sont
+ * plus écrasés par eux. Pour « safe area + de l'air », écrire pb-[calc(env(safe-area-inset-bottom)+24px)].
+ */
+@utility safe-top {
+  padding-top: max(env(safe-area-inset-top), 12px);
+}
+@utility safe-bottom {
+  padding-bottom: max(env(safe-area-inset-bottom), 12px);
 }
 
 @media (prefers-reduced-motion: reduce) {

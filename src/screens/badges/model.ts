@@ -3,6 +3,7 @@
  * plus proche, et « évènements » de déblocage pour la cérémonie.
  */
 import type { BadgeState, BadgeTier } from '../../core/badges'
+import { diffDays } from '../../core/dates'
 import type { DayKey } from '../../core/types'
 import { isBinary, isTiered, progressRatio } from './copy'
 
@@ -62,4 +63,24 @@ export function unlockEvents(badges: BadgeState[]): UnlockEvent[] {
     }
   }
   return events.sort((a, b) => (a.on < b.on ? -1 : a.on > b.on ? 1 : 0))
+}
+
+/** Première visite : les déblocages de plus de GRACE_DAYS jours comptent comme déjà fêtés. */
+const GRACE_DAYS = 3
+
+/**
+ * Repère enregistré dès la première visite : seenBadges n'est plus jamais vide ensuite,
+ * même sans aucun badge, et le délai de grâce ne s'applique qu'une fois.
+ */
+export const FIRST_VISIT_KEY = 'premiere-visite'
+
+/** Clés à marquer vues à la toute première visite : le repère + les vieux déblocages. */
+export function firstVisitKeys(events: UnlockEvent[], today: DayKey): string[] {
+  return [FIRST_VISIT_KEY, ...events.filter((e) => diffDays(e.on, today) > GRACE_DAYS).map((e) => e.key)]
+}
+
+/** Déblocages pas encore fêtés, du plus ancien au plus récent. */
+export function pendingUnlocks(events: UnlockEvent[], seenBadges: readonly string[], today: DayKey): UnlockEvent[] {
+  const seen = new Set(seenBadges.length === 0 ? firstVisitKeys(events, today) : seenBadges)
+  return events.filter((e) => !seen.has(e.key))
 }

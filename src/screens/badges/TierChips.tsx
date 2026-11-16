@@ -3,6 +3,7 @@
  */
 import { motion, useReducedMotion } from 'motion/react'
 import type { BadgeState } from '../../core/badges'
+import { NBSP } from '../../core/fr'
 
 export function TierChips({ badge }: { badge: BadgeState }) {
   const reduced = useReducedMotion() ?? false
@@ -27,7 +28,7 @@ export function TierChips({ badge }: { badge: BadgeState }) {
                   }
                 : { background: 'var(--color-sunken)', color: 'var(--color-muted)', boxShadow: 'inset 0 0 0 1.5px var(--color-line)' }
             }
-            aria-label={`${t.label} : ${done ? 'atteint' : 'pas encore'}`}
+            aria-label={`${t.label}${NBSP}: ${done ? 'atteint' : 'pas encore'}`}
           >
             {t.label}
           </motion.li>

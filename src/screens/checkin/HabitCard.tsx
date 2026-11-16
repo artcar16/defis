@@ -5,10 +5,12 @@
  */
 import { AnimatePresence, motion, useAnimationControls, useReducedMotion, type TargetAndTransition } from 'motion/react'
 import { useState, type Ref } from 'react'
+import { formatPts, formatSignedPts } from '../../core/fr'
 import { pointsFor, valuesFor } from '../../core/scoring'
 import type { CheckinValue } from '../../core/types'
+import { deep, tint } from '../../ui/color'
 import { VALUE_COLORS, VALUE_LABELS, springy } from '../../ui/kit'
-import { KIND_LABELS, inkOf, pointsLabel, shadeOf, tint } from './format'
+import { KIND_LABELS, shadeOf } from './format'
 import type { HabitRow } from './useCheckin'
 
 interface HabitCardProps {
@@ -45,9 +47,11 @@ export function HabitCard({ row, editable, onAnswer, index, ref }: HabitCardProp
       }}
       aria-label={habit.name}
     >
-      <div className="flex items-center gap-3">
+      {/* Tuile emoji | nom + précision | points. Sous 360 px, les points passent sous la précision
+          pour laisser toute la largeur au nom (jamais tronqué : il passe à la ligne). */}
+      <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 min-[360px]:grid-cols-[auto_minmax(0,1fr)_auto]">
         <motion.div
-          className="grid size-16 shrink-0 place-items-center rounded-[20px] text-[40px] leading-none"
+          className="row-span-2 grid size-16 place-items-center rounded-[20px] text-[40px] leading-none min-[360px]:row-span-1"
           style={{ background: c ? tint(c, 20) : 'var(--color-sunken)' }}
           animate={tile}
           aria-hidden="true"
@@ -55,19 +59,21 @@ export function HabitCard({ row, editable, onAnswer, index, ref }: HabitCardProp
           <span className="drop-shadow-[0_4px_4px_rgb(43_29_63_/_0.15)]">{habit.emoji}</span>
         </motion.div>
 
-        <div className="min-w-0 flex-1">
-          <h3 className="flex flex-wrap items-center gap-x-2 font-display text-[22px] leading-tight font-bold text-ink">
-            <span className="truncate">{habit.name}</span>
+        <div className="min-w-0">
+          <h3 className="flex flex-wrap items-center gap-x-2 gap-y-1 font-display text-[clamp(19px,6vw,22px)] leading-tight font-bold text-ink">
+            <span className="min-w-0 break-words text-balance hyphens-auto">{habit.name}</span>
             {row.lastWeek && (
-              <span className="rounded-full bg-sunken px-2 py-0.5 font-body text-[14px] font-bold text-muted">dernière semaine 👋</span>
+              <span className="rounded-full bg-sunken px-2 py-0.5 font-body text-[14px] font-bold whitespace-nowrap text-muted">dernière semaine 👋</span>
             )}
           </h3>
-          <p className="mt-0.5 line-clamp-2 text-[15px] leading-snug font-semibold text-muted">
+          <p className="mt-0.5 text-[15px] leading-snug font-semibold text-pretty break-words text-muted">
             {habit.hint || (habit.kind === 'avoid' ? 'À éviter' : 'À faire')}
           </p>
         </div>
 
-        <PointsBadge row={row} reduced={reduced} />
+        <div className="relative col-start-2 row-start-2 mt-2 flex min-[360px]:col-start-3 min-[360px]:row-start-1 min-[360px]:mt-0">
+          <PointsBadge row={row} reduced={reduced} />
+        </div>
       </div>
 
       <div
@@ -101,13 +107,13 @@ function PointsBadge({ row, reduced }: { row: HabitRow; reduced: boolean }) {
         <motion.span
           key={row.value}
           className="shrink-0 rounded-full px-2.5 py-1 font-display text-[16px] font-bold"
-          style={{ background: tint(c, 18, 'transparent'), color: inkOf(c, 78) }}
+          style={{ background: tint(c, 18, 'transparent'), color: deep(c, 78) }}
           initial={reduced ? { opacity: 0 } : { scale: 0.3, opacity: 0 }}
           animate={{ scale: 1, opacity: 1 }}
           exit={{ scale: 0.6, opacity: 0 }}
           transition={springy}
         >
-          {pointsLabel(row.points)}
+          {formatSignedPts(row.points)}
         </motion.span>
       ) : (
         <motion.span
@@ -174,7 +180,7 @@ function ChoiceButton({
       role="radio"
       aria-checked={selected}
       aria-disabled={disabled || undefined}
-      aria-label={`${label}, ${pointsLabel(points).replace('+', '')}`}
+      aria-label={`${label}, ${formatPts(points)}`}
       onClick={pick}
       whileTap={disabled || reduced ? undefined : { scale: 0.9, y: 3 }}
       animate={{ opacity: dimmed ? 0.5 : 1, scale: selected && !reduced ? [0.92, 1.06, 1] : 1 }}
@@ -205,12 +211,12 @@ function ChoiceButton({
       </motion.span>
       <span
         className="font-display text-[16px] leading-none font-semibold"
-        style={{ color: selected ? inkOf(c, 70) : 'var(--color-ink-soft)' }}
+        style={{ color: selected ? deep(c, 70) : 'var(--color-ink-soft)' }}
       >
         {label}
       </span>
-      <span className="font-display text-[13px] leading-none font-semibold" style={{ color: selected ? inkOf(c, 60) : 'var(--color-muted)' }}>
-        {points} {points > 1 ? 'pts' : 'pt'}
+      <span className="font-display text-[13px] leading-none font-semibold" style={{ color: selected ? deep(c, 60) : 'var(--color-muted)' }}>
+        {formatPts(points)}
       </span>
 
       {/* Les points qui s'envolent. */}
@@ -219,7 +225,7 @@ function ChoiceButton({
           <motion.span
             key={flyKey}
             className="pointer-events-none absolute -top-2 left-1/2 z-10 font-display text-[22px] font-bold whitespace-nowrap"
-            style={{ color: inkOf(c, 80), textShadow: '0 2px 0 var(--color-surface)' }}
+            style={{ color: deep(c, 80), textShadow: '0 2px 0 var(--color-surface)' }}
             initial={{ x: '-50%', y: 0, opacity: 1, scale: 0.7 }}
             animate={{ x: '-50%', y: -42, opacity: 0, scale: 1.25 }}
             transition={{ duration: 0.85, ease: 'easeOut' }}

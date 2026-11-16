@@ -5,6 +5,16 @@
  * On se chambre, mais JAMAIS méchamment, et JAMAIS sur le physique ou le poids
  * (les phrases du Ring ne parlent jamais de kilos : un test le vérifie).
  *
+ * Écriture (vérifiée par les tests de src/core/taunts.test.ts) :
+ * - les phrases valent pour Laetitia comme pour Arthus : formes neutres ou écriture
+ *   inclusive (mené·e, champion·ne) ;
+ * - {habit} peut être une habitude perso (« Eau », « Légumes », « Écrans au lit ») :
+ *   rien ne s'accorde avec elle (« {emoji} {habit} : pas fait aujourd’hui ») ;
+ * - écrire « de {other} » ou « que {other} » : l'élision (« d’Arthus ») est automatique ;
+ * - espaces normales avant ! ? : ; et dans « » : les espaces insécables sont
+ *   ajoutées automatiquement (typo() de src/core/fr.ts) ; apostrophe courbe ’ ;
+ * - pas de mot anglais.
+ *
  * Le choix de la phrase est fait dans src/core/taunts.ts :
  * - on garde les phrases dont toutes les conditions sont vraies ;
  * - une phrase est tirée au sort de façon stable avec la date (pas de
@@ -65,9 +75,10 @@ export type RingSituation =
  * - {gap} : l'écart avec l'unité, ex. « 40 pts » ;
  * - {myTotal}, {otherTotal} : les scores de la semaine ;
  * - {daysLeft} : jours restants avec l'unité, ex. « 3 jours » ;
- * - {hour} : l'heure, ex. « 21 » ;
+ * - {hour} : l'heure avec l'unité, ex. « 21 h » ;
  * - {maxPoints} : le maximum de points de la pesée avec l'unité, ex. « 100 pts » ;
- * - {habit}, {emoji}, {days} : la série 🔥 (myStreak / otherStreak uniquement) ;
+ * - {habit}, {emoji}, {days} : la série 🔥 (myStreak / otherStreak uniquement),
+ *   {days} avec l'unité, ex. « 12 jours » ;
  * - {myWins}, {otherWins} : le bilan global des manches ;
  * - {winStreak} : nombre de manches gagnées d'affilée (defend uniquement).
  */
@@ -89,12 +100,12 @@ const ANY_LEAD: Lead[] = ['me', 'other']
 export const RING_PHRASES: Record<RingSituation, RingPhrase[]> = {
   notStarted: [
     { text: 'Le duel commence lundi. Échauffez-vous, ça va chauffer 🥊' },
-    { text: '{me} vs {other} : le premier round arrive lundi 🔔 Préparez vos emojis !' },
+    { text: '{me} contre {other} : premier coup de gong lundi 🔔 Préparez vos emojis !' },
   ],
 
   evening: [
-    { text: 'Il est {hour}h et ton check-in t’attend toujours ⏰' },
-    { text: 'Psst {me}… ton check-in, c’est 15 secondes chrono ⏱️' },
+    { text: 'Il est {hour} et ton check-in t’attend toujours ⏰' },
+    { text: 'Psst, {me}… ton check-in, c’est 15 secondes chrono ⏱️' },
     { text: '{other} te regarde 👀 Ton check-in du jour n’est pas fait…' },
     { text: '{other} mène de {gap} et ton check-in n’est même pas fait 🙃 Allez hop !', lead: 'other' },
     { text: 'Tu mènes de {gap}… à condition de faire ton check-in ce soir 😉', lead: 'me' },
@@ -115,18 +126,18 @@ export const RING_PHRASES: Record<RingSituation, RingPhrase[]> = {
     { text: '{other} n’a pas encore fait son check-in 👀' },
     { text: 'Toi, c’est fait ✅ {other} ? Toujours rien 👀' },
     { text: 'Check-in fait ✅ Maintenant on attend {other}… 🍿' },
-    { text: 'Il est {hour}h et {other} n’a toujours pas fait son check-in… suspect 🕵️', minHour: 19 },
+    { text: 'Il est {hour} et {other} n’a toujours pas fait son check-in… suspect 🕵️', minHour: 19 },
     { text: '{other} n’a pas encore fait son check-in 👀 Il se passe quoi là-bas ?', minHour: 19 },
   ],
 
   day: [
     // Lundi : nouveau départ
-    { text: 'Nouvelle manche, égalité parfaite. Que le meilleur gagne 🥊', day: 'monday', lead: 'tie' },
-    { text: 'Lundi, nouveau départ 🏁 Le premier qui prend l’avance gagne le droit de frimer 😎', day: 'monday', lead: 'tie' },
+    { text: 'Nouvelle manche, égalité parfaite. Que le duel commence 🥊', day: 'monday', lead: 'tie' },
+    { text: 'Lundi, nouveau départ 🏁 Qui prend l’avance gagne le droit de frimer 😎', day: 'monday', lead: 'tie' },
     { text: 'Lundi, et tu mènes déjà de {gap}. Ça commence fort 😎', day: 'monday', lead: 'me' },
     { text: 'Démarrage canon 🚀 {me} prend {gap} d’avance dès lundi', day: 'monday', lead: 'me' },
-    { text: '{other} démarre en trombe (+{gap}). Réveille-toi {me} ☕', day: 'monday', lead: 'other' },
-    { text: 'Lundi matin et déjà {gap} de retard… le café d’abord, la revanche ensuite ☕', day: 'monday', lead: 'other' },
+    { text: '{other} démarre en trombe (+{gap}). Réveille-toi, {me} ☕', day: 'monday', lead: 'other' },
+    { text: 'Lundi, et déjà {gap} de retard… le café d’abord, la revanche ensuite ☕', day: 'monday', lead: 'other' },
     // Milieu de semaine
     { text: 'Mi-manche : {gap} d’avance. Garde le rythme 🏃', day: 'midweek', lead: 'me' },
     { text: 'Mi-manche, {leader} devant de {gap}. Rien n’est joué 🎲', day: 'midweek', lead: ANY_LEAD, gap: ['small', 'medium'] },
@@ -144,11 +155,11 @@ export const RING_PHRASES: Record<RingSituation, RingPhrase[]> = {
     { text: 'Sprint final 🏁 {trailer} doit rattraper {gap} en {daysLeft}', day: 'sprint', lead: ANY_LEAD },
     { text: 'Dernière ligne droite et tu mènes de {gap}. Pas de relâchement 😤', day: 'sprint', lead: 'me' },
     { text: 'Plus que {daysLeft} pour reprendre {gap} à {other}. Faisable 💪', day: 'sprint', lead: 'other' },
-    { text: 'Sprint final et égalité 🏁 Le premier qui craque a perdu', day: 'sprint', lead: 'tie' },
+    { text: 'Sprint final et égalité 🏁 Qui craque en premier a perdu', day: 'sprint', lead: 'tie' },
     { text: 'Égalité à {daysLeft} de la fin 😳 Qui va flancher ?', day: 'sprint', lead: 'tie' },
     // Dimanche : dernier jour
     { text: 'Dernier jour ! {trailer} a encore {gap} à rattraper 😬', day: 'sunday', lead: ANY_LEAD, gap: ['small', 'medium'] },
-    { text: 'Dimanche, dernier round 🔔 Tout se joue aujourd’hui', day: 'sunday', lead: ANY_LEAD, gap: ['small', 'medium'] },
+    { text: 'Dimanche, dernier jour de combat 🔔 Tout se joue aujourd’hui', day: 'sunday', lead: ANY_LEAD, gap: ['small', 'medium'] },
     { text: 'Dimanche et {gap} d’avance… {leader} sent déjà la victoire 👑', day: 'sunday', lead: ANY_LEAD, gap: 'large' },
     { text: 'Dernier jour, {gap} d’écart. {trailer} prépare déjà le gage ? 😈', day: 'sunday', lead: ANY_LEAD, gap: 'large' },
     { text: 'Dimanche et égalité parfaite 😱 Chaque point compte !', day: 'sunday', lead: 'tie' },
@@ -174,7 +185,7 @@ export const RING_PHRASES: Record<RingSituation, RingPhrase[]> = {
   revenge: [
     { text: '{other} a gagné la dernière manche. L’heure de la revanche a sonné ⚔️' },
     { text: 'Revanche en cours : tu mènes de {gap} 😤🔥', lead: 'me' },
-    { text: 'Perdre deux manches de suite ? Hors de question. Au boulot {me} 💪', lead: ['other', 'tie'] },
+    { text: 'Perdre deux manches de suite ? Hors de question. Au boulot, {me} 💪', lead: ['other', 'tie'] },
   ],
 
   defend: [
@@ -183,14 +194,14 @@ export const RING_PHRASES: Record<RingSituation, RingPhrase[]> = {
   ],
 
   myStreak: [
-    { text: '🔥 {days} jours d’affilée sur {emoji} {habit} ! On lâche rien' },
-    { text: 'Série en cours : {days} jours {emoji} {habit} 🔥 {other} peut aller se rhabiller' },
-    { text: '{emoji} {habit} : {days} jours de suite. T’es en feu {me} 🔥' },
+    { text: '🔥 {days} d’affilée sur {emoji} {habit} ! On lâche rien' },
+    { text: 'Série en cours : {days} {emoji} {habit} 🔥 {other} peut aller se rhabiller' },
+    { text: '{emoji} {habit} : {days} de suite. T’es en feu, {me} 🔥' },
   ],
 
   otherStreak: [
-    { text: '{other} enchaîne {days} jours sur {emoji} {habit} 🔥 Faut suivre le rythme !' },
-    { text: 'Attention, {other} est en série : {days} jours {emoji} {habit} 😳' },
+    { text: '{other} enchaîne {days} sur {emoji} {habit} 🔥 Faut suivre le rythme !' },
+    { text: 'Attention, {other} est en série : {days} {emoji} {habit} 😳' },
   ],
 
   record: [
@@ -213,47 +224,65 @@ export const RING_PHRASES: Record<RingSituation, RingPhrase[]> = {
 export type CheckinState = 'empty' | 'partial' | 'perfect' | 'craquage' | 'pasfait' | 'unpeu'
 
 /**
- * Trous : {name} (prénom), {score} (score du jour /100), {left} (habitudes
- * restantes), {habit} et {emoji} (l'habitude concernée).
+ * Trous : {name} (prénom), {score} (score du jour), {max} (score maximum d'un jour,
+ * ex. 100), {left} (habitudes restantes avec l'unité, ex. « 2 habitudes »), {habit}
+ * et {emoji} (l'habitude concernée, qui peut être une habitude perso : ne rien accorder
+ * avec elle).
  */
 export interface CheckinPhrase {
   text: string
   state: CheckinState
   /** La phrase ne sort que si cette habitude est concernée (réussie / ratée selon l'état). */
   habit?: BadgeHabitKey
+  /**
+   * 'today' : seulement pour le check-in du jour (peut dire « aujourd’hui », « demain ») ;
+   * 'yesterday' : seulement en rattrapage d'hier (au passé, sans « aujourd’hui » ni
+   * « demain ») ; absent : valable dans les deux cas.
+   */
+  when?: 'today' | 'yesterday'
 }
 
 export const CHECKIN_PHRASES: CheckinPhrase[] = [
   // Pas commencé
-  { state: 'empty', text: 'Allez {name}, 15 secondes chrono ⏱️' },
-  { state: 'empty', text: 'Un tap par habitude et c’est plié 👆' },
+  { state: 'empty', text: 'Allez, {name}, 15 secondes chrono ⏱️' },
+  { state: 'empty', text: 'Une touche par habitude et c’est plié 👆' },
   { state: 'empty', text: 'Ton check-in t’attend. Sois honnête, on te regarde 👀' },
+  { state: 'empty', when: 'yesterday', text: 'Un petit oubli hier ? Ça se rattrape en 15 secondes ⏱️' },
   // En cours
   { state: 'partial', text: 'Encore {left} à remplir et c’est bouclé 👉' },
   { state: 'partial', text: 'C’est parti ! Plus que {left} 💨' },
-  { state: 'partial', text: 'Ça avance… {score}/100 pour l’instant 📈' },
+  { state: 'partial', text: 'Ça avance… {score}/{max} pour l’instant 📈' },
   // Journée parfaite
   { state: 'perfect', text: 'Journée parfaite ! Tes ongles te disent merci 💅', habit: 'ongles' },
   { state: 'perfect', text: 'Journée parfaite ! Zéro grattage, zen absolu 🧘', habit: 'grattage' },
   { state: 'perfect', text: 'Journée parfaite ! Le frigo est resté fermé à double tour 🔒', habit: 'grignotage' },
   { state: 'perfect', text: 'Journée parfaite ! Sport fait, t’es une machine 🏋️', habit: 'sport' },
-  { state: 'perfect', text: '100/100 ! Rien à redire, {name} en mode champion·ne 🏆' },
+  { state: 'perfect', text: '{max}/{max} ! Rien à redire, {name} en mode champion·ne 🏆' },
   { state: 'perfect', text: 'Sans faute 🎉 Journée parfaite !' },
+  { state: 'perfect', when: 'yesterday', text: 'Rattrapage parfait 🎉 Hier, c’était un sans-faute !' },
   // Craquage
-  { state: 'craquage', text: 'Le frigo a gagné aujourd’hui 🍫… revanche demain.', habit: 'grignotage' },
-  { state: 'craquage', text: 'Petite razzia sur les placards 🍪… demain on se reprend.', habit: 'grignotage' },
-  { state: 'craquage', text: 'Les ongles ont trinqué aujourd’hui 💅… demain on tient bon.', habit: 'ongles' },
-  { state: 'craquage', text: 'Ça a gratouillé aujourd’hui 🦟… demain, zen absolu 🧘', habit: 'grattage' },
-  { state: 'craquage', text: '{emoji} {habit} a gagné cette fois… revanche demain 💪' },
-  { state: 'craquage', text: 'Un craquage, ça arrive à tout le monde 🙈 Demain on repart à zéro.' },
+  { state: 'craquage', when: 'today', text: 'Le frigo a gagné aujourd’hui 🍫… revanche demain.', habit: 'grignotage' },
+  { state: 'craquage', when: 'today', text: 'Petite razzia sur les placards 🍪… demain on se reprend.', habit: 'grignotage' },
+  { state: 'craquage', when: 'today', text: 'Les ongles ont trinqué aujourd’hui 💅… demain on tient bon.', habit: 'ongles' },
+  { state: 'craquage', when: 'today', text: 'Ça a gratouillé aujourd’hui 🦟… demain, zen absolu 🧘', habit: 'grattage' },
+  { state: 'craquage', when: 'today', text: '{emoji} {habit} : la tentation l’a emporté aujourd’hui… revanche demain 💪' },
+  { state: 'craquage', when: 'today', text: 'Un craquage, ça arrive à tout le monde 🙈 Demain on repart à zéro.' },
+  { state: 'craquage', when: 'yesterday', text: 'Hier, le frigo a gagné une bataille 🍫… pas la guerre 😤', habit: 'grignotage' },
+  { state: 'craquage', when: 'yesterday', text: 'Hier, les ongles ont trinqué 💅… on tourne la page.', habit: 'ongles' },
+  { state: 'craquage', when: 'yesterday', text: 'Hier, ça a gratouillé 🦟… on respire et on repart 🧘', habit: 'grattage' },
+  { state: 'craquage', when: 'yesterday', text: '{emoji} {habit} : la tentation l’a emporté hier… on tourne la page 💪' },
+  { state: 'craquage', when: 'yesterday', text: 'Un craquage hier ? Ça arrive à tout le monde 🙈 Merci pour l’honnêteté.' },
   // Pas fait
-  { state: 'pasfait', text: 'Le canapé a gagné aujourd’hui 🛋️… demain on bouge !', habit: 'sport' },
-  { state: 'pasfait', text: 'Pas de sport aujourd’hui ? Demain, les baskets t’attendent 👟', habit: 'sport' },
-  { state: 'pasfait', text: '{emoji} {habit} pas fait… demain c’est la bonne 💪' },
+  { state: 'pasfait', when: 'today', text: 'Le canapé a gagné aujourd’hui 🛋️… demain on bouge !', habit: 'sport' },
+  { state: 'pasfait', when: 'today', text: 'Pas de sport aujourd’hui ? Demain, les baskets t’attendent 👟', habit: 'sport' },
+  { state: 'pasfait', when: 'today', text: '{emoji} {habit} : pas fait aujourd’hui… demain c’est la bonne 💪' },
+  { state: 'pasfait', when: 'yesterday', text: 'Hier, le canapé a gagné 🛋️… les baskets attendent leur revanche 👟', habit: 'sport' },
+  { state: 'pasfait', when: 'yesterday', text: '{emoji} {habit} : pas fait hier… la suite de la manche est à toi 💪' },
   // Presque
-  { state: 'unpeu', text: '{score}/100, pas mal du tout ! Le 100 est à portée de main 💪' },
+  { state: 'unpeu', text: '{score}/{max}, pas mal du tout ! Le {max} est à portée de main 💪' },
   { state: 'unpeu', text: 'Presque parfait 😬 Un petit « un peu » qui traîne…' },
-  { state: 'unpeu', text: 'Check-in bouclé ✅ {score}/100, on vise le carton plein demain 🎯' },
+  { state: 'unpeu', when: 'today', text: 'Check-in bouclé ✅ {score}/{max}, on vise le carton plein demain 🎯' },
+  { state: 'unpeu', when: 'yesterday', text: 'Hier bouclé ✅ {score}/{max}, joli rattrapage 😉' },
 ]
 
 // ─── Pesée ──────────────────────────────────────────────────────────────────
@@ -262,7 +291,7 @@ export const CHECKIN_PHRASES: CheckinPhrase[] = [
  * Réactions à la pesée, par tranche de points. On parle de points et d'effort,
  * jamais du corps. Trou : {points} (points gagnés avec l'unité, ex. « 50 pts »).
  * - start : toute première pesée (point de départ) ;
- * - goal : 100 pts grâce à la zone objectif ;
+ * - goal : 100 pts grâce à la zone objectif (seulement si on y est vraiment, voir weighInBucket) ;
  * - max : 100 pts ; great : 60 à 99 ; good : 30 à 59 ; small : 1 à 29 ; zero : 0.
  */
 export type WeighInBucket = 'start' | 'goal' | 'max' | 'great' | 'good' | 'small' | 'zero'
@@ -294,7 +323,7 @@ export const WEIGHIN_REACTIONS: Record<WeighInBucket, { emoji: string; text: str
   ],
   zero: [
     { emoji: '🤷', text: 'Pas de points cette fois. On se rattrape aux check-ins 💪' },
-    { emoji: '😌', text: '0 pt cette semaine, pas de panique : la manche se joue aussi au quotidien.' },
+    { emoji: '😌', text: '{points} cette semaine, pas de panique : la manche se joue aussi au quotidien.' },
   ],
 }
 
@@ -304,8 +333,10 @@ export const WEIGHIN_REACTIONS: Record<WeighInBucket, { emoji: string; text: str
 export type ResultGap = 'small' | 'medium' | 'large'
 
 /**
- * Trous : {winner}, {loser} (prénoms), {gap} (écart avec l'unité), {stake} (le gage).
+ * Trous : {winner}, {loser} (prénoms), {gap} (écart avec l'unité), {stake} (le gage,
+ * première lettre en minuscule pour s'insérer dans la phrase : « au programme : vaisselle… »).
  * En cas d'égalité, {winner} et {loser} sont simplement les deux joueurs.
+ * La cérémonie s'ouvre APRÈS la manche (le lundi ou plus tard) : pas de « dès lundi ».
  */
 export interface ResultsPhrase {
   text: string
@@ -322,11 +353,12 @@ export const RESULTS_PHRASES: ResultsPhrase[] = [
   { kind: 'winner', text: 'Victoire écrasante de {winner} : {gap} d’écart 🏆', gap: 'large' },
   // Perdant
   { kind: 'loser', text: '{loser}, c’est l’heure du gage 😭' },
-  { kind: 'loser', text: 'Dur dur, {loser}… La revanche, c’est dès lundi 😤' },
-  { kind: 'loser', text: '{loser}, au programme : {stake} 😈' },
-  { kind: 'loser', text: 'Perdu de {gap}, {loser}… Ça se joue à un biscuit 🍪', gap: 'small' },
+  { kind: 'loser', text: 'Dur dur, {loser}… Mais la revanche a déjà commencé 😤' },
+  { kind: 'loser', text: '😈 {loser}, au programme : {stake}' },
+  { kind: 'loser', text: 'Perdu de {gap}, {loser}… Ça s’est joué à un biscuit près 🍪', gap: 'small' },
   // Égalité
   { kind: 'tie', text: 'Égalité ! Gage pour les deux 🤝' },
   { kind: 'tie', text: 'Impossible de vous départager : {winner} et {loser}, gage pour tout le monde 😅' },
   { kind: 'tie', text: 'Ex æquo ! Vous êtes vraiment faits l’un pour l’autre 💞' },
+  { kind: 'tie', text: 'Égalité parfaite 🤝 Au programme pour les deux : {stake}' },
 ]

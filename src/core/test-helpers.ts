@@ -7,6 +7,7 @@ import { indexCheckins, type DayScore, type ScoringData } from './scoring'
 import type { SeasonRecord } from './season'
 import type {
   BadgeHabitKey,
+  BadgeUnlock,
   Checkin,
   CheckinValue,
   DayKey,
@@ -112,6 +113,8 @@ export interface SnapshotInput {
   seasonStart?: DayKey
   weighInDays?: WeighInDayRule[]
   seenResults?: DayKey[]
+  badgeUnlocks?: BadgeUnlock[]
+  seenBadges?: string[]
 }
 
 export function makeSnapshot(input: SnapshotInput = {}): DuelSnapshot {
@@ -130,6 +133,8 @@ export function makeSnapshot(input: SnapshotInput = {}): DuelSnapshot {
     },
     proposals: [],
     seenResults: input.seenResults ?? [],
+    badgeUnlocks: input.badgeUnlocks ?? [],
+    seenBadges: input.seenBadges ?? [],
   }
 }
 

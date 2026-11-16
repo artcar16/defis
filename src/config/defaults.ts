@@ -3,7 +3,15 @@
  * Elles servent à la création des données (démo et Supabase), puis tout est
  * modifiable dans l'app (Réglages).
  */
-import type { BadgeHabitKey, HabitKind } from '../core/types'
+import type { BadgeHabitKey, DayKey, HabitKind } from '../core/types'
+
+/**
+ * 🏁 Date de début du vrai duel (décision 14 de SPEC.md) : le LUNDI de la première manche.
+ * À ajuster à l'étape 4 (Supabase), au moment de créer les données. Conseil : faire la
+ * pesée de départ le dimanche d'avant. La démo la remplace (elle commence 3 manches
+ * avant la semaine en cours). Un test vérifie que c'est bien un lundi.
+ */
+export const SEASON_START: DayKey = '2026-11-23'
 
 export interface DefaultPlayer {
   key: 'laetitia' | 'arthus'
@@ -44,16 +52,20 @@ export const HABIT_IDEAS: { name: string; emoji: string; kind: HabitKind }[] = [
   { name: 'Sucre', emoji: '🍬', kind: 'avoid' },
 ]
 
-/** Liste de gages de départ pour la roulette 🎲. */
+/**
+ * Liste de gages de départ pour la roulette 🎲. Un gage est fait par qui perd la manche
+ * (par les deux en cas d'égalité) : chaque texte doit être clair sur qui en profite
+ * (« l’autre » = qui a gagné), sans rien de genré.
+ */
 export const DEFAULT_GAGES: string[] = [
   'Vaisselle pendant une semaine 🍽️',
-  'Massage de 15 min 💆',
-  'Choix du film ce week-end 🎬',
-  'Petit-déj au lit 🥐',
+  'Offrir un massage de 15\u00a0min 💆',
+  'Laisser l’autre choisir le film du week-end 🎬',
+  'Servir le petit-déj au lit 🥐',
   'Corvée de courses 🛒',
-  'Cuisiner le dîner de son choix 👩‍🍳',
+  'Cuisiner le dîner choisi par l’autre 🧑‍🍳',
   'Ménage de la salle de bain 🧽',
-  'Une soirée sans téléphone pour le perdant 📵',
+  'Une soirée sans téléphone 📵',
 ]
 
 /** Emojis proposés pour les avatars. */

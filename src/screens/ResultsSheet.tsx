@@ -2,14 +2,17 @@
  * 🏆 Feuille Résultats de la semaine (SPEC « 4. Résultats » + décisions 11 et 12).
  * - Manche terminée : cérémonie (🥁 → scores → 👑 + confettis → 😭), puis le détail
  *   jour par jour, le gage et « Gage payé ✅ » (validé par l'autre).
+ * Les minuteurs de la fête sont annulés à la fermeture (pas de pluie d'emojis sur le Ring).
  * - Manche en cours : classement provisoire, sans cérémonie.
  * S'ouvre toute seule à la première visite après la fin d'une manche (App.tsx) :
  * on la marque « vue » dès l'ouverture.
  */
-import { motion, useReducedMotion } from 'motion/react'
+import { motion, useIsPresent, useReducedMotion } from 'motion/react'
 import { useEffect, useRef, useState } from 'react'
+import { NBSP } from '../core/fr'
 import type { DayKey } from '../core/types'
 import { useDuel } from '../data/DuelProvider'
+import { themeColor } from '../ui/color'
 import { celebrate, emojiRain } from '../ui/confetti'
 import { Button, SectionTitle, Sheet } from '../ui/kit'
 import { atLeast, Ceremony, type Stage } from './results/Ceremony'
@@ -18,11 +21,12 @@ import { GageCard } from './results/GageCard'
 import { LiveStandings } from './results/LiveStandings'
 import { RecordStrip, WeekBadges } from './results/RecordStrip'
 import { useWeekResults, type WeekResults } from './results/useWeekResults'
-import { tokenColor } from './weighin/format'
 import { SheetGlow } from './weighin/SheetGlow'
 
 /** Durée du compteur des scores (pour le plus gros score). */
 const COUNT_MS = 1700
+/** Délai de la pluie d'emojis après les confettis. */
+const RAIN_DELAY_MS = 450
 /** Durée de chaque étape de la cérémonie avant la suivante. */
 const STAGE_MS: Record<Exclude<Stage, 'done'>, number> = { drumroll: 1900, count: COUNT_MS + 450, crown: 1500 }
 const NEXT: Record<Exclude<Stage, 'done'>, Stage> = { drumroll: 'count', count: 'crown', crown: 'done' }
@@ -49,6 +53,8 @@ function ResultsContent({ weekStart, onClose }: { weekStart: DayKey; onClose: ()
   const reduced = useReducedMotion() ?? false
   const finished = results?.week.finished ?? false
   const root = useRef<HTMLDivElement>(null)
+  // Faux dès que la feuille se ferme (pendant son animation de sortie, les props ne changent plus).
+  const active = useIsPresent()
 
   // Déjà vue ? Alors version courte (la couronne tombe, sans suspense ni confettis).
   const [seenAtOpen] = useState(() => snapshot.seenResults.includes(weekStart))
@@ -71,13 +77,22 @@ function ResultsContent({ weekStart, onClose }: { weekStart: DayKey; onClose: ()
     return () => window.clearTimeout(t)
   }, [stage, run])
 
-  // 🎉 Confettis à l'arrivée de la couronne.
-  const fired = useRef(-1)
+  // 🎉 Confettis à l'arrivée de la couronne (une fois par cérémonie), puis la pluie d'emojis.
+  // La pluie, différée, est annulée si la feuille se ferme ou si l'écran change avant.
+  const fired = useRef({ run: -1, rained: false })
   useEffect(() => {
-    if (stage !== 'crown' || !festive || !results || fired.current === run) return
-    fired.current = run
-    fireCeremony(results, me.id)
-  }, [stage, festive, results, run, me.id])
+    if (stage !== 'crown' || !festive || !results || !active) return
+    if (fired.current.run !== run) {
+      fired.current = { run, rained: false }
+      celebrate(ceremonyColors(results))
+    }
+    if (fired.current.rained) return
+    const t = globalThis.setTimeout(() => {
+      fired.current.rained = true
+      emojiRain(rainEmoji(results, me.id), ceremonyColors(results))
+    }, RAIN_DELAY_MS)
+    return () => globalThis.clearTimeout(t)
+  }, [stage, festive, results, run, me.id, active])
 
   if (!results) {
     return (
@@ -164,20 +179,18 @@ function ResultsContent({ weekStart, onClose }: { weekStart: DayKey; onClose: ()
 
 function closeLabel(results: WeekResults, meId: string, isLastFinished: boolean): string {
   if (!results.week.finished || !isLastFinished) return 'Retour au duel 🥊'
-  if (results.tie) return 'Au prochain round 🥊'
-  return results.winner?.id === meId ? 'On remet ça 😎' : 'Revanche ! 😤'
+  if (results.tie) return 'À la prochaine manche 🥊'
+  return results.winner?.id === meId ? 'On remet ça 😎' : `Revanche${NBSP}! 😤`
 }
 
-function fireCeremony(results: WeekResults, meId: string) {
-  const gold = tokenColor('--color-gold', '#ffc23d')
-  if (!results.winner) {
-    const colors = [results.left.color, results.right.color, gold]
-    celebrate(colors)
-    window.setTimeout(() => emojiRain('🤝', colors), 450)
-    return
-  }
-  const colors = [results.winner.color, gold]
-  celebrate(colors)
-  // Le gagnant voit pleuvoir des couronnes, le perdant… des larmes 😭 (avec amour).
-  window.setTimeout(() => emojiRain(results.winner?.id === meId ? '👑' : '😭', colors), 450)
+/** Couleurs de la fête : celles du vainqueur (ou des deux en cas d'égalité) et l'or. */
+function ceremonyColors(results: WeekResults): string[] {
+  const gold = themeColor('gold', '#ffc23d')
+  return results.winner ? [results.winner.color, gold] : [results.left.color, results.right.color, gold]
+}
+
+/** 🤝 pour une égalité ; sinon des couronnes pour qui gagne, des larmes 😭 (avec amour) pour qui perd. */
+function rainEmoji(results: WeekResults, meId: string): string {
+  if (!results.winner) return '🤝'
+  return results.winner.id === meId ? '👑' : '😭'
 }

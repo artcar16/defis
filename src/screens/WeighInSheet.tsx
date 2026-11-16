@@ -8,14 +8,17 @@
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import { RULES } from '../config/rules'
-import { weighInPoints } from '../core/scoring'
-import { formatPts, weighInReaction } from '../core/taunts'
+import { formatPts, formatSignedPts, frDate, NBSP, ptsUnit, relativeDays, typo } from '../core/fr'
+import { isInGoalZone, weighInPoints } from '../core/scoring'
+import { weighInReaction } from '../core/taunts'
 import { formatKg, formatPct } from '../core/weight'
 import { useDuel } from '../data/DuelProvider'
+import { deep, themeColor, tint } from '../ui/color'
 import { burst } from '../ui/confetti'
+import { errorText } from '../ui/format'
 import { Button, Card, Pill, Sheet, springy } from '../ui/kit'
 import { useToast } from '../ui/toast'
-import { capitalize, deep, inDays, longDay, shortDay, tint, tokenColor } from './weighin/format'
+import { GAIN_INK, shortDay } from './weighin/format'
 import { SheetGlow } from './weighin/SheetGlow'
 import { GoalCard, OpponentCard, WeighInHistory } from './weighin/WeighInCards'
 import { WeighInPreview } from './weighin/WeighInPreview'
@@ -118,6 +121,8 @@ function Editor({
   const toast = useToast()
   const reduced = useReducedMotion() ?? false
   const [saving, setSaving] = useState(false)
+  // Poids tapé hors bornes, pas encore corrigé : on n'enregistre pas l'ancienne valeur à la place.
+  const [invalid, setInvalid] = useState(false)
   const correcting = data.todayWeighIn !== null
   const unchanged = correcting && data.todayWeighIn?.weightKg != null && Math.round(data.todayWeighIn.weightKg * 10) === tenths
 
@@ -126,14 +131,14 @@ function Editor({
     try {
       await source.saveWeighIn(data.today, tenths / 10)
       const pts = preview.points
-      if (pts > 0) burst([me.color, tokenColor('--color-gold', '#ffc23d'), tokenColor('--color-nickel', '#22c55e')], { x: 0.5, y: 0.35 })
+      if (pts > 0) burst([me.color, themeColor('gold', '#ffc23d'), themeColor('nickel', '#22c55e')], { x: 0.5, y: 0.35 })
       toast({
-        text: preview.first ? '📍 Point de départ enregistré !' : `⚖️ Pesée ${correcting ? 'corrigée' : 'enregistrée'} : ${pts > 0 ? '+' : ''}${formatPts(pts)}`,
+        text: preview.first ? '📍 Point de départ enregistré !' : `⚖️ Pesée ${correcting ? 'corrigée' : 'enregistrée'} : ${formatSignedPts(pts)}`,
         color: me.color,
       })
       onSaved()
     } catch (e) {
-      toast({ text: e instanceof Error ? e.message : 'Oups, la pesée n’est pas passée 😕', color: 'var(--color-craquage)' })
+      toast({ text: errorText(e, 'Oups, la pesée n’est pas passée 😕'), color: 'var(--color-craquage)' })
     } finally {
       setSaving(false)
     }
@@ -152,7 +157,7 @@ function Editor({
           ⚖️
         </motion.span>
         <div className="min-w-0">
-          <h2 className="font-display text-[28px] leading-tight font-bold text-ink">{correcting ? 'Correction ✏️' : 'C’est le jour J !'}</h2>
+          <h2 className="font-display text-[28px] leading-tight font-bold text-ink">{correcting ? 'Correction ✏️' : `C’est le jour J${NBSP}!`}</h2>
           <p className="text-[15px] font-semibold text-muted">
             {correcting ? 'Modifiable jusqu’à 23:59 ce soir' : `Jusqu’à ${formatPts(RULES.weighIn.maxPoints)} à gagner 🎯`}
           </p>
@@ -161,11 +166,11 @@ function Editor({
 
       <Card className="pt-4 pb-4">
         <p className="mb-2 text-center font-display text-[17px] font-semibold text-ink-soft">Ton poids du jour</p>
-        <WeightStepper tenths={tenths} onChange={setTenths} color={me.color} />
+        <WeightStepper tenths={tenths} onChange={setTenths} color={me.color} onInvalidChange={setInvalid} />
         <p className="mt-3 text-center text-[14px] font-semibold text-muted">
           {data.prev?.weightKg != null
-            ? `Dernière pesée : ${formatKg(data.prev.weightKg)} · ${shortDay(data.prev.day)}`
-            : 'Première pesée : elle sert de point de départ 📍'}
+            ? `Dernière pesée${NBSP}: ${formatKg(data.prev.weightKg)} · ${shortDay(data.prev.day)}`
+            : `Première pesée${NBSP}: elle sert de point de départ 📍`}
           <br />
           <span className="text-[13px]">Touche le nombre pour le taper ⌨️</span>
         </p>
@@ -173,11 +178,19 @@ function Editor({
 
       <WeighInPreview preview={preview} seed={data.today} />
 
-      <Button size="xl" block onClick={save} disabled={saving || unchanged} aria-busy={saving}>
-        {saving ? 'Enregistrement…' : unchanged ? 'Déjà enregistré ✅' : correcting ? 'Corriger ma pesée ✏️' : 'Valider ma pesée ⚖️'}
+      <Button size="xl" block onClick={save} disabled={saving || unchanged || invalid} aria-busy={saving}>
+        {saving
+          ? 'Enregistrement…'
+          : invalid
+            ? 'Poids à corriger ✏️'
+            : unchanged
+              ? 'Déjà enregistré ✅'
+              : correcting
+                ? 'Corriger ma pesée ✏️'
+                : 'Valider ma pesée ⚖️'}
       </Button>
       <p className="-mt-1 text-center text-[13px] font-semibold text-muted">
-        {me.showKg ? `👀 ${other.name} voit aussi tes kilos (option dans les Réglages)` : `🔒 ${other.name} ne verra que ta variation en %`}
+        {me.showKg ? `👀 ${other.name} voit aussi tes kilos (option dans les Réglages)` : `🔒 ${other.name} ne verra que ta variation en${NBSP}%`}
       </p>
     </div>
   )
@@ -188,10 +201,11 @@ function Editor({
 function DoneView({ data, justSaved, onEdit, onClose }: { data: WeighInData; justSaved: boolean; onEdit: () => void; onClose: () => void }) {
   const reduced = useReducedMotion() ?? false
   const w = data.todayWeighIn
-  if (!w) return null
+  // La source n'a pas encore renvoyé la pesée (écriture distante en cours) : on patiente.
+  if (!w) return <SavingView />
   const points = weighInPoints(w)
   const first = w.changePct === null
-  const reaction = weighInReaction(w.changePct, points, data.today)
+  const reaction = weighInReaction(w.changePct, points, data.today, isInGoalZone(w.goalDistancePct))
 
   return (
     <div className="flex flex-col items-center px-1 pt-2 text-center">
@@ -205,12 +219,12 @@ function DoneView({ data, justSaved, onEdit, onClose }: { data: WeighInData; jus
         {first ? '📍' : reaction.emoji}
       </motion.div>
       <h2 className="mt-2 font-display text-[28px] leading-tight font-bold text-ink">
-        {first ? 'Point de départ 📍' : justSaved ? 'Pesée enregistrée !' : 'Pesée du jour ✅'}
+        {first ? 'Point de départ 📍' : justSaved ? `Pesée enregistrée${NBSP}!` : 'Pesée du jour ✅'}
       </h2>
 
       <motion.div
         className="mt-1 flex items-baseline gap-1.5"
-        style={{ color: points > 0 ? 'color-mix(in oklab, var(--color-nickel) 70%, var(--color-ink))' : 'var(--color-ink-soft)' }}
+        style={{ color: points > 0 ? GAIN_INK : 'var(--color-ink-soft)' }}
         initial={reduced ? false : { scale: 0.6, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         transition={{ ...springy, delay: 0.15 }}
@@ -219,7 +233,7 @@ function DoneView({ data, justSaved, onEdit, onClose }: { data: WeighInData; jus
           {points > 0 ? '+' : ''}
           {points}
         </span>
-        <span className="font-display text-2xl font-semibold text-muted">{points > 1 ? 'pts' : 'pt'}</span>
+        <span className="font-display text-2xl font-semibold text-muted">{ptsUnit(points)}</span>
       </motion.div>
 
       <p className="mt-2 max-w-[320px] text-[16px] leading-snug font-bold text-ink-soft">
@@ -228,7 +242,7 @@ function DoneView({ data, justSaved, onEdit, onClose }: { data: WeighInData; jus
 
       <div className="mt-3 flex flex-wrap justify-center gap-2">
         {w.weightKg !== null && <Pill color={'var(--me)'}>{formatKg(w.weightKg)}</Pill>}
-        {!first && <Pill color={'var(--me)'}>{formatPct(w.changePct, 2)} vs la dernière</Pill>}
+        {!first && <Pill color={'var(--me)'}>{formatPct(w.changePct, 2)} depuis la dernière pesée</Pill>}
       </div>
 
       <div className="mt-6 flex w-full flex-col gap-3">
@@ -244,6 +258,25 @@ function DoneView({ data, justSaved, onEdit, onClose }: { data: WeighInData; jus
   )
 }
 
+/** En attendant que la source renvoie la pesée enregistrée (jamais une feuille vide). */
+function SavingView() {
+  const reduced = useReducedMotion() ?? false
+  return (
+    <div className="flex flex-col items-center px-1 pt-10 pb-6 text-center" role="status" aria-live="polite">
+      <motion.span
+        className="emoji-xl text-[72px]"
+        animate={reduced ? undefined : { rotate: [0, 180, 180, 360] }}
+        transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
+        aria-hidden="true"
+      >
+        ⏳
+      </motion.span>
+      <p className="mt-3 font-display text-[24px] font-bold text-ink">Enregistrement…</p>
+      <p className="mt-1 text-[15px] font-semibold text-muted">La balance transmet ton résultat 📡</p>
+    </div>
+  )
+}
+
 // ─── Pas le jour J ───────────────────────────────────────────────────────────
 
 function LockedView({ data }: { data: WeighInData }) {
@@ -251,7 +284,7 @@ function LockedView({ data }: { data: WeighInData }) {
   const reduced = useReducedMotion() ?? false
   const last = data.mine.at(-1) ?? null
   const lastPoints = weighInPoints(last)
-  const lastReaction = last ? weighInReaction(last.changePct, lastPoints, last.day) : null
+  const lastReaction = last ? weighInReaction(last.changePct, lastPoints, last.day, isInGoalZone(last.goalDistancePct)) : null
 
   return (
     <div className="flex flex-col items-center px-1 pt-2 text-center">
@@ -286,16 +319,16 @@ function LockedView({ data }: { data: WeighInData }) {
       >
         <p className="text-[13px] font-bold tracking-wide text-muted uppercase">Prochaine pesée</p>
         <p className="mt-1 font-display text-[26px] leading-tight font-bold" style={{ color: deep(me.color, 78) }}>
-          <span className="sr-only">Prochaine pesée : </span>
-          {capitalize(longDay(data.nextDate))}
+          <span className="sr-only">Prochaine pesée{NBSP}: </span>
+          {frDate(data.nextDate, { capitalized: true })}
         </p>
         <div className="mt-2 flex justify-center">
-          <Pill color={me.color}>⏳ {inDays(data.today, data.nextDate)}</Pill>
+          <Pill color={me.color}>⏳ {relativeDays(data.today, data.nextDate)}</Pill>
         </div>
       </motion.div>
 
       <p className="mt-4 max-w-[330px] text-[15px] font-semibold text-ink-soft">
-        D’ici là, chaque check-in compte : jusqu’à {formatPts(RULES.week.dailyMax)} par jour 💪
+        {typo(`D’ici là, chaque check-in compte : jusqu’à ${formatPts(RULES.week.dailyMax)} par jour 💪`)}
       </p>
 
       {last && lastReaction && (
@@ -305,13 +338,14 @@ function LockedView({ data }: { data: WeighInData }) {
           </span>
           <div className="min-w-0 flex-1">
             <p className="font-display text-[17px] leading-tight font-semibold text-ink">Ta dernière pesée</p>
+            {/* 2 décimales à côté des points (−0,61 % = 61 pts). */}
             <p className="text-[15px] font-semibold text-muted">
-              {capitalize(shortDay(last.day))} · {last.changePct === null ? 'point de départ' : formatPct(last.changePct)}
+              {shortDay(last.day, true)} · {last.changePct === null ? 'point de départ' : formatPct(last.changePct, 2)}
             </p>
           </div>
-          <span className="score-num text-[28px]" style={{ color: lastPoints > 0 ? 'color-mix(in oklab, var(--color-nickel) 70%, var(--color-ink))' : 'var(--color-muted)' }}>
+          <span className="score-num shrink-0 text-[28px] whitespace-nowrap" style={{ color: lastPoints > 0 ? GAIN_INK : 'var(--color-muted)' }}>
             {last.changePct === null ? '—' : lastPoints > 0 ? `+${lastPoints}` : '0'}
-            <span className="ml-0.5 font-display text-[14px] font-semibold text-muted">{last.changePct === null ? '' : lastPoints > 1 ? 'pts' : 'pt'}</span>
+            <span className="ml-0.5 font-display text-[14px] font-semibold text-muted">{last.changePct === null ? '' : ptsUnit(lastPoints)}</span>
           </span>
         </Card>
       )}

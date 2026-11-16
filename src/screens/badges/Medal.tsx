@@ -4,6 +4,7 @@
  * tant que le badge n'est pas débloqué.
  */
 import { motion, useReducedMotion } from 'motion/react'
+import { onColor } from '../../ui/color'
 
 export type MedalState = 'unlocked' | 'locked' | 'na'
 
@@ -41,6 +42,8 @@ export function Medal({
   const px = SIZES[size]
   const unlocked = state === 'unlocked'
   const showRibbons = ribbons && state !== 'na' && size !== 'sm'
+  // Pastille ×N : fond et encre lisibles (le corail ou le jaune d'un joueur sous du blanc, c'est illisible).
+  const pill = onColor(color)
 
   return (
     <div className="relative shrink-0" style={{ width: px, height: showRibbons ? px * 1.14 : px }} aria-hidden="true">
@@ -128,14 +131,15 @@ export function Medal({
 
       {unlocked && count > 1 && (
         <span
-          className="score-num absolute grid min-w-[2.1em] place-items-center rounded-full px-1.5 leading-none text-white ring-[3px] ring-surface"
+          className="score-num absolute grid min-w-[2.1em] place-items-center rounded-full px-1.5 leading-none ring-[3px] ring-surface"
           style={{
             top: -px * 0.02,
             right: -px * 0.08,
             height: Math.max(26, px * 0.3),
             fontSize: Math.max(14, px * 0.17),
-            background: color,
-            boxShadow: `0 3px 0 color-mix(in oklab, ${color} 65%, black)`,
+            background: pill.bg,
+            color: pill.ink,
+            boxShadow: `0 3px 0 color-mix(in oklab, ${pill.bg} 65%, black)`,
           }}
         >
           ×{count}

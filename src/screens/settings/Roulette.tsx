@@ -5,10 +5,13 @@
 import { animate, motion, useMotionValue, useReducedMotion, useTransform, useVelocity } from 'motion/react'
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { burst } from '../../ui/confetti'
+import { tint } from '../../ui/color'
 import { springy } from '../../ui/kit'
-import { ON_GOLD, tint } from './format'
+import { ON_GOLD } from './format'
 
 const ROW_H = 64
+/** Au-delà, le gage passe en petit sur 3 lignes : l'enjeu au centre doit se lire en entier. */
+const LONG_LABEL = 38
 const LOOPS = 5
 const EMPTY_LABEL = '❓ Pas encore d’enjeu'
 
@@ -126,10 +129,12 @@ export function Roulette({
           {reel.map((g, i) => (
             <li
               key={`${i}-${g}`}
-              className="flex items-center justify-center px-11 text-center font-display text-[17px] leading-snug font-semibold text-balance"
+              className={`flex items-center justify-center px-9 text-center font-display font-semibold text-balance min-[360px]:px-11 ${
+                g.length > LONG_LABEL ? 'text-[14px] leading-tight' : 'text-[15px] leading-snug min-[360px]:text-[17px]'
+              }`}
               style={{ height: ROW_H, color: i === (spinning ? -1 : 1) ? 'var(--color-ink)' : 'var(--color-muted)' }}
             >
-              <span className="line-clamp-2">{g}</span>
+              <span className="line-clamp-3">{g}</span>
             </li>
           ))}
         </motion.ul>
@@ -172,7 +177,8 @@ export function Roulette({
           aria-disabled={spinning || undefined}
           whileTap={{ scale: 0.96 }}
           transition={springy}
-          className="btn-chunky mt-4 min-h-16 w-full px-6 text-[21px]"
+          // iPhone SE : un peu plus petit, pour que « 🎲 Lancer la roulette » tienne sur une ligne.
+          className="btn-chunky mt-4 min-h-16 w-full px-4 text-[19px] min-[360px]:px-6 min-[360px]:text-[21px]"
           style={{ ['--btn' as string]: 'var(--color-gold)', ['--btn-ink' as string]: ON_GOLD }}
         >
           <motion.span

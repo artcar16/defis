@@ -7,14 +7,17 @@
  */
 import { motion, useReducedMotion } from 'motion/react'
 import { useState } from 'react'
+import { plural } from '../core/fr'
 import { useDuel } from '../data/DuelProvider'
+import { tint } from '../ui/color'
+import { errorText } from '../ui/format'
 import { Button, ScreenHeader, springy } from '../ui/kit'
+import { ANCHORS, useNav } from '../ui/nav'
 import { useToast } from '../ui/toast'
 import { DemoSection } from './settings/DemoSection'
-import { errorText, tint } from './settings/format'
 import { GoalSection } from './settings/GoalSection'
 import { HabitsSection } from './settings/HabitsSection'
-import { PROPOSALS_ANCHOR, ProposalsSection } from './settings/ProposalsSection'
+import { ProposalsSection } from './settings/ProposalsSection'
 import { ProfileSection } from './settings/ProfileSection'
 import { StakeSection } from './settings/StakeSection'
 import { WeighDaySection } from './settings/WeighDaySection'
@@ -49,12 +52,12 @@ export function SettingsScreen() {
 /** « 📬 Laetitia attend ta réponse » → descend jusqu'aux propositions. */
 function InboxBanner({ count, otherName, color }: { count: number; otherName: string; color: string }) {
   const reduced = useReducedMotion() ?? false
+  const { setTab } = useNav()
   return (
     <motion.button
       type="button"
-      onClick={() =>
-        document.getElementById(PROPOSALS_ANCHOR)?.scrollIntoView({ behavior: reduced ? 'auto' : 'smooth', block: 'start' })
-      }
+      // Même chemin que la bannière du Ring : défilement sous l'encoche, mouvement réduit respecté.
+      onClick={() => setTab('settings', { anchor: ANCHORS.proposals })}
       initial={reduced ? false : { opacity: 0, y: -10, scale: 0.95 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       whileTap={{ scale: 0.97 }}
@@ -78,7 +81,7 @@ function InboxBanner({ count, otherName, color }: { count: number; otherName: st
           {otherName} attend ta réponse
         </span>
         <span className="block text-[15px] text-ink-soft">
-          {count > 1 ? `${count} propositions à valider` : '1 proposition à valider'} 👇
+          {plural(count, 'proposition')} à valider 👇
         </span>
       </span>
       <span className="font-display text-[26px] text-muted" aria-hidden="true">

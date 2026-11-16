@@ -1,67 +1,69 @@
 /**
- * Petits formatages en français partagés par la pesée et les résultats.
+ * Formats propres à la pesée et aux résultats. Le reste (dates, pluriels, élisions,
+ * typographie) vient de core/fr.ts, les couleurs de ui/color.ts.
  */
-import { diffDays, formatDay } from '../../core/dates'
+import { RULES } from '../../config/rules'
+import { frDate, NBSP } from '../../core/fr'
 import type { DayKey } from '../../core/types'
+import { deep } from '../../ui/color'
 
-/** « 22 novembre », « 1er novembre ». */
-export function prettyDay(day: DayKey): string {
-  const d = formatDay(day, 'd')
-  return `${d === '1' ? '1er' : d} ${formatDay(day, 'MMMM')}`
+/** « dim. 1er nov. » (« Dim. 1er nov. » avec `capitalized`). */
+export function shortDay(day: DayKey, capitalized = false): string {
+  return frDate(day, { weekday: 'EEE', month: 'MMM', capitalized })
 }
 
-/** « dimanche 22 novembre ». */
-export function longDay(day: DayKey): string {
-  return `${formatDay(day, 'EEEE')} ${prettyDay(day)}`
+/** Encre « points gagnés » (vert lisible, en clair comme en sombre). */
+export const GAIN_INK = deep('var(--color-nickel)', 70)
+
+// ─── Saisie du poids ─────────────────────────────────────────────────────────
+
+/** Bornes et pas du sélecteur, en dixièmes de kg (entiers : pas d'erreurs d'arrondi). */
+export const TENTHS = {
+  min: Math.round(RULES.weighIn.minKg * 10),
+  max: Math.round(RULES.weighIn.maxKg * 10),
+  step: Math.max(1, Math.round(RULES.weighIn.stepKg * 10)),
 }
 
-/** « dim. 15 nov. ». */
-export function shortDay(day: DayKey): string {
-  return formatDay(day, 'EEE d MMM')
+export function clampTenths(t: number): number {
+  return Math.min(TENTHS.max, Math.max(TENTHS.min, Math.round(t)))
 }
 
-/** « du 9 au 15 novembre », « du 26 octobre au 1er novembre ». */
-export function weekRange(start: DayKey, end: DayKey): string {
-  const sameMonth = formatDay(start, 'MM') === formatDay(end, 'MM')
-  const d = formatDay(start, 'd')
-  const from = sameMonth ? (d === '1' ? '1er' : d) : prettyDay(start)
-  return `du ${from} au ${prettyDay(end)}`
+/** « 83,4 » (sans unité). */
+export function tenthsLabel(t: number): string {
+  return (t / 10).toFixed(1).replace('.', ',')
 }
 
-/** « aujourd'hui », « demain », « dans 6 jours ». */
-export function inDays(from: DayKey, to: DayKey): string {
-  const n = diffDays(from, to)
-  if (n <= 0) return 'aujourd’hui'
-  if (n === 1) return 'demain'
-  return `dans ${n} jours`
+/** Message d'une saisie hors bornes : « Entre 30 et 250 kg 🙃 ». */
+export const KG_RANGE_TEXT = `Entre ${frNum(RULES.weighIn.minKg)} et ${frNum(RULES.weighIn.maxKg)}${NBSP}kg 🙃`
+
+/** Nombre avec virgule décimale (« 0,5 », « 30 »). */
+export function frNum(n: number): string {
+  return String(n).replace('.', ',')
 }
 
-/** « de Laetitia », « d’Arthus » (élision devant une voyelle). */
-export function deName(name: string): string {
-  return /^[aeiouyàâäéèêëîïôöùûü]/i.test(name) ? `d’${name}` : `de ${name}`
-}
-
-/** Première lettre en majuscule (« Dimanche 22 novembre »). */
-export function capitalize(s: string): string {
-  return s.charAt(0).toUpperCase() + s.slice(1)
-}
+export type WeightInput =
+  /** `guessed` : virgule oubliée, « 823 » lu 82,3. */
+  | { ok: true; tenths: number; guessed: boolean }
+  /** 'empty' : rien de lisible (on garde l'ancienne valeur) ; 'range' : hors bornes. */
+  | { ok: false; reason: 'empty' | 'range' }
 
 /**
- * Valeur concrète d'un jeton de couleur du thème (canvas-confetti a besoin de vraies
- * couleurs, pas de var(--…)). Ex. tokenColor('--color-gold', '#ffc23d').
+ * Lit un poids tapé au clavier (« 82,3 », « 82.3 kg »). Hors bornes, on refuse (jamais
+ * ramené en silence à 30 ou 250 kg) ; un entier trop grand sans séparateur est lu comme
+ * une virgule oubliée si c'est plausible (« 823 » → 82,3 ; « 8234 » → 82,3).
  */
-export function tokenColor(token: string, fallback: string): string {
-  if (typeof document === 'undefined') return fallback
-  const v = getComputedStyle(document.documentElement).getPropertyValue(token).trim()
-  return v || fallback
-}
-
-/** Couleur d'un joueur assombrie vers l'encre (texte lisible en clair comme en sombre). */
-export function deep(color: string, pct = 82): string {
-  return `color-mix(in oklab, ${color} ${pct}%, var(--color-ink))`
-}
-
-/** Teinte légère d'une couleur sur la surface. */
-export function tint(color: string, pct = 16): string {
-  return `color-mix(in oklab, ${color} ${pct}%, var(--color-surface))`
+export function parseWeightInput(text: string): WeightInput {
+  const cleaned = text.trim().replace(',', '.').replace(/[^\d.]/g, '')
+  const n = Number.parseFloat(cleaned)
+  if (!Number.isFinite(n)) return { ok: false, reason: 'empty' }
+  const inRange = (t: number) => t >= TENTHS.min && t <= TENTHS.max
+  const t = Math.round(n * 10)
+  if (inRange(t)) return { ok: true, tenths: t, guessed: false }
+  if (!cleaned.includes('.') && Number.isInteger(n) && n > RULES.weighIn.maxKg) {
+    for (const div of [10, 100]) {
+      const g = Math.round((n / div) * 10)
+      if (inRange(g)) return { ok: true, tenths: g, guessed: true }
+    }
+  }
+  return { ok: false, reason: 'range' }
 }

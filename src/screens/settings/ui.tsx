@@ -4,9 +4,10 @@
  */
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useCallback, useId, useState, type CSSProperties, type InputHTMLAttributes, type ReactNode } from 'react'
+import { tint } from '../../ui/color'
+import { errorText } from '../../ui/format'
 import { springy } from '../../ui/kit'
 import { useToast, type ToastInput } from '../../ui/toast'
-import { errorText, tint } from './format'
 
 // ─── Action + toast ──────────────────────────────────────────────────────────
 
@@ -66,7 +67,8 @@ export function Section({
     <motion.section
       id={id}
       aria-labelledby={headingId}
-      className={`card mt-4 scroll-mt-4 p-4 ${className}`}
+      // Pas de scroll-mt-* ici : la règle globale [id] (index.css) garde la marge de l'encoche.
+      className={`card mt-4 p-4 ${className}`}
       style={style}
       initial={reduced ? false : { opacity: 0, y: 18 }}
       animate={{ opacity: 1, y: 0 }}
@@ -342,14 +344,15 @@ export function StatusLine({
       layout
       initial={{ opacity: 0, scale: 0.96 }}
       animate={{ opacity: 1, scale: 1 }}
-      className="mt-3 flex min-h-12 items-center gap-2.5 rounded-2xl px-3 py-2"
+      // flex-wrap : sur un écran étroit (iPhone SE), le bouton passe dessous au lieu d'écraser le texte.
+      className="mt-3 flex min-h-12 flex-wrap items-center gap-x-2.5 gap-y-2 rounded-2xl px-3 py-2"
       style={{ background: tint(color, 14), boxShadow: `inset 0 0 0 2px ${tint(color, 28, 'transparent')}` }}
     >
       <span className="text-[22px] leading-none" aria-hidden="true">
         {emoji}
       </span>
-      <span className="min-w-0 flex-1 text-[15px] leading-snug font-semibold text-ink">{children}</span>
-      {action}
+      <span className="min-w-0 flex-1 basis-36 text-[15px] leading-snug font-semibold text-ink">{children}</span>
+      {action && <span className="ml-auto shrink-0">{action}</span>}
     </motion.div>
   )
 }

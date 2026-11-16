@@ -5,10 +5,30 @@
 import { AnimatePresence, motion, type HTMLMotionProps } from 'motion/react'
 import { useEffect, type CSSProperties, type ReactNode } from 'react'
 import type { Player } from '../core/types'
+import { onColor, resolveHex } from './color'
 
-/** Variables CSS d'un joueur : --pc (couleur), à utiliser via bg-[var(--pc)] etc. */
+/**
+ * Variables CSS d'un joueur : --pc (couleur), --pc-btn / --pc-ink (fond et encre lisibles
+ * d'un bouton à sa couleur), à utiliser via bg-[var(--pc)] etc.
+ */
 export function playerStyle(player: Pick<Player, 'color'>): CSSProperties {
-  return { ['--pc' as string]: player.color, ['--btn' as string]: player.color } as CSSProperties
+  const { bg, ink } = onColor(player.color)
+  return {
+    ['--pc' as string]: player.color,
+    ['--pc-btn' as string]: bg,
+    ['--pc-ink' as string]: ink,
+    ['--btn' as string]: bg,
+  } as CSSProperties
+}
+
+/**
+ * Fond et encre d'un bouton de couleur `color` (hex ou jeton du thème) : encre blanche
+ * lisible, fond assombri si besoin, ou encre foncée sur les couleurs trop claires.
+ */
+export function buttonColors(color: string, ink?: string): CSSProperties {
+  const hex = resolveHex(color)
+  const c = hex ? onColor(hex) : { bg: color, ink: '#fff' }
+  return { ['--btn' as string]: c.bg, ['--btn-ink' as string]: ink ?? c.ink } as CSSProperties
 }
 
 /** Ressort « rebond » standard pour les animations Motion. */
@@ -22,27 +42,34 @@ type ButtonProps = Omit<HTMLMotionProps<'button'>, 'children'> & {
   /** 'primary' = couleur (du joueur par défaut), 'soft' = fond carte. */
   variant?: 'primary' | 'soft'
   size?: 'sm' | 'md' | 'lg' | 'xl'
-  /** Couleur du bouton (sinon couleur du joueur connecté). */
+  /**
+   * Couleur du bouton, hex ou jeton (`var(--color-nickel)`) ; sinon couleur du joueur connecté.
+   * L'encre (blanche ou foncée) et un léger assombrissement sont choisis pour rester lisibles.
+   */
   color?: string
+  /** Encre imposée (sinon calculée d'après `color`). */
+  ink?: string
   block?: boolean
 }
 
+// py-2 : un libellé qui passe sur 2 lignes garde de l'air en haut et en bas.
 const SIZES = {
-  sm: 'min-h-10 px-4 text-[15px]',
-  md: 'min-h-12 px-5 text-[17px]',
-  lg: 'min-h-14 px-6 text-xl',
-  xl: 'min-h-[72px] px-7 text-2xl',
+  sm: 'min-h-10 px-4 py-2 text-[15px]',
+  md: 'min-h-12 px-5 py-2 text-[17px]',
+  lg: 'min-h-14 px-6 py-2 text-xl',
+  xl: 'min-h-[72px] px-7 py-2 text-2xl',
 }
 
 /** Gros bouton arrondi façon jeu, qui s'écrase au tap. */
-export function Button({ children, variant = 'primary', size = 'md', color, block, className = '', style, ...rest }: ButtonProps) {
+export function Button({ children, variant = 'primary', size = 'md', color, ink, block, className = '', style, ...rest }: ButtonProps) {
+  const colors = color ? buttonColors(color, ink) : ink ? { ['--btn-ink' as string]: ink } : {}
   return (
     <motion.button
       type="button"
       whileTap={{ scale: 0.96 }}
       transition={springy}
       className={`btn-chunky ${variant === 'soft' ? 'btn-soft' : ''} ${SIZES[size]} ${block ? 'w-full' : ''} ${className}`}
-      style={{ ...(color ? { ['--btn' as string]: color } : {}), ...style }}
+      style={{ ...colors, ...style }}
       {...rest}
     >
       {children}
@@ -136,10 +163,23 @@ export function Pill({ children, color, className = '' }: { children: ReactNode;
 
 // ─── Barre de progression ────────────────────────────────────────────────────
 
-export function ProgressBar({ value, max, color, className = '' }: { value: number; max: number; color: string; className?: string }) {
+export function ProgressBar({
+  value,
+  max,
+  color,
+  track,
+  className = '',
+}: {
+  value: number
+  max: number
+  color: string
+  /** Couleur de la piste (défaut : fond creusé du thème). */
+  track?: string
+  className?: string
+}) {
   const pct = max > 0 ? Math.max(0, Math.min(100, (value / max) * 100)) : 0
   return (
-    <div className={`h-3 overflow-hidden rounded-full bg-sunken ${className}`}>
+    <div className={`h-3 overflow-hidden rounded-full ${track ? '' : 'bg-sunken'} ${className}`} style={track ? { background: track } : undefined}>
       <motion.div
         className="h-full rounded-full"
         style={{ background: color }}
@@ -172,7 +212,8 @@ export function Sheet({
     if (!open) return
     const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    // Échap ferme la feuille, sauf si un champ l'a déjà traité (ex. annuler une saisie de poids).
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && !e.defaultPrevented && onClose()
     window.addEventListener('keydown', onKey)
     return () => {
       document.body.style.overflow = prev
@@ -213,7 +254,8 @@ export function Sheet({
               ✕
             </motion.button>
           </div>
-          <div className="safe-bottom mx-auto w-full max-w-md flex-1 px-4 pb-6">{children}</div>
+          {/* Barre d'accueil de l'iPhone + 24 px d'air sous le dernier bouton. */}
+          <div className="mx-auto w-full max-w-md flex-1 px-4 pb-[calc(env(safe-area-inset-bottom)+24px)]">{children}</div>
         </motion.div>
       )}
     </AnimatePresence>
@@ -223,11 +265,12 @@ export function Sheet({
 // ─── Petits utilitaires ──────────────────────────────────────────────────────
 
 /** Nombre animé (compteur qui monte). */
-export function AnimatedNumber({ value, className = '' }: { value: number; className?: string }) {
+export function AnimatedNumber({ value, className = '', style }: { value: number; className?: string; style?: CSSProperties }) {
   return (
     <motion.span
       key={value}
       className={`score-num inline-block ${className}`}
+      style={style}
       initial={{ y: -8, scale: 1.25, opacity: 0.4 }}
       animate={{ y: 0, scale: 1, opacity: 1 }}
       transition={springy}

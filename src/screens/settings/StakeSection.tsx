@@ -3,17 +3,35 @@
  * puis verrouillé jusqu'à la fin de la manche. La liste des gages, elle, est libre.
  */
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useState, type KeyboardEvent } from 'react'
 import { RULES } from '../../config/rules'
 import { addDays, formatDay } from '../../core/dates'
 import { isStakeEditable } from '../../core/season'
 import { useDuel } from '../../data/DuelProvider'
 import { Button, springy } from '../../ui/kit'
+import { ANCHORS } from '../../ui/nav'
 import { useToast } from '../../ui/toast'
 import { Roulette } from './Roulette'
 import { Collapsible, INPUT_CLASS, MiniButton, StatusLine, Section, useAction } from './ui'
 
 const GAGE_MAX = 80
+
+/**
+ * Entrée valide la saisie (Maj+Entrée garde le retour à la ligne, et on ignore l'Entrée
+ * qui confirme une saisie IME). Pas de <form> : dans un cadre sandboxé sans allow-forms,
+ * la soumission native est bloquée avant même l'événement submit.
+ */
+function onEnter(action: () => void, onEscape?: () => void) {
+  return (e: KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+      e.preventDefault()
+      action()
+    } else if (e.key === 'Escape' && onEscape) {
+      e.preventDefault()
+      onEscape()
+    }
+  }
+}
 
 export function StakeSection({ index }: { index: number }) {
   const { season, today, source, me, other, snapshot } = useDuel()
@@ -39,10 +57,11 @@ export function StakeSection({ index }: { index: number }) {
 
   return (
     <Section
+      id={ANCHORS.stake}
       index={index}
       emoji="🎰"
       title="Enjeu de la semaine"
-      subtitle={`Manche ${week.index} · le perdant s’y colle 😈`}
+      subtitle={`Manche ${week.index} · qui perd s’y colle\u00a0😈`}
     >
       <Roulette
         gages={gages}
@@ -58,17 +77,13 @@ export function StakeSection({ index }: { index: number }) {
         <>
           <AnimatePresence initial={false} mode="wait">
             {writing ? (
-              <motion.form
+              <motion.div
                 key="write"
                 initial={reduced ? false : { opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
                 transition={springy}
                 className="mt-4"
-                onSubmit={(e) => {
-                  e.preventDefault()
-                  void saveDraft()
-                }}
               >
                 <label htmlFor={inputId} className="mb-1.5 block px-1 font-display text-[15px] font-semibold text-ink-soft">
                   Ton gage sur mesure
@@ -80,18 +95,23 @@ export function StakeSection({ index }: { index: number }) {
                   rows={2}
                   autoFocus
                   placeholder="ex. Porter le pull moche de Noël toute une soirée 🎄"
+                  enterKeyHint="done"
                   onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={onEnter(
+                    () => void saveDraft(),
+                    () => setWriting(false),
+                  )}
                   className={`${INPUT_CLASS} resize-none`}
                 />
                 <div className="mt-3 flex gap-2.5">
-                  <Button type="submit" className="flex-1" disabled={!draft.trim() || busy}>
+                  <Button className="flex-1" disabled={!draft.trim() || busy} onClick={() => void saveDraft()}>
                     Valider 🤝
                   </Button>
                   <Button variant="soft" onClick={() => setWriting(false)}>
                     Annuler
                   </Button>
                 </div>
-              </motion.form>
+              </motion.div>
             ) : (
               <motion.div key="btn" initial={false} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                 <Button
@@ -116,7 +136,8 @@ export function StakeSection({ index }: { index: number }) {
         <StatusLine emoji="🔒" color="var(--color-muted)">
           {stake ? (
             <>
-              <b>Verrouillé jusqu’à dimanche.</b> Plus moyen de se défiler 😈
+              <b>Verrouillé jusqu’à {week.weekEnd === today ? 'ce soir minuit' : formatDay(week.weekEnd, 'EEEE')}.</b> Plus moyen de
+              se défiler 😈
             </>
           ) : (
             <>
@@ -207,34 +228,32 @@ function GagesEditor({
             className="rounded-2xl bg-surface"
           >
             {editing === i ? (
-              <form
-                className="flex items-center gap-2 p-2"
-                onSubmit={(e) => {
-                  e.preventDefault()
-                  void saveEdit(i)
-                }}
-              >
+              <div className="flex items-center gap-2 p-2">
                 <input
                   value={editText}
                   maxLength={GAGE_MAX}
                   autoFocus
+                  enterKeyHint="done"
                   aria-label="Modifier le gage"
                   onChange={(e) => setEditText(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Escape' && setEditing(null)}
+                  onKeyDown={onEnter(
+                    () => void saveEdit(i),
+                    () => setEditing(null),
+                  )}
                   className={`${INPUT_CLASS} min-w-0 flex-1 px-3`}
                 />
-                <IconButton label="Valider" type="submit">
+                <IconButton label="Valider" onClick={() => void saveEdit(i)}>
                   ✅
                 </IconButton>
                 <IconButton label="Annuler la modification" onClick={() => setEditing(null)}>
                   ↩️
                 </IconButton>
-              </form>
+              </div>
             ) : (
               <div className="flex items-center gap-1 py-1 pr-1 pl-3.5">
                 <span className="min-w-0 flex-1 py-2 text-[15px] leading-snug font-semibold text-ink">{g}</span>
                 <IconButton
-                  label={`Modifier « ${g} »`}
+                  label={`Modifier «\u00a0${g}\u00a0»`}
                   onClick={() => {
                     setEditing(i)
                     setEditText(g)
@@ -242,7 +261,7 @@ function GagesEditor({
                 >
                   ✏️
                 </IconButton>
-                <IconButton label={`Supprimer « ${g} »`} onClick={() => remove(i)}>
+                <IconButton label={`Supprimer «\u00a0${g}\u00a0»`} onClick={() => remove(i)}>
                   🗑️
                 </IconButton>
               </div>
@@ -250,13 +269,7 @@ function GagesEditor({
           </motion.li>
         ))}
       </ul>
-      <form
-        className="mt-3 flex items-center gap-2"
-        onSubmit={(e) => {
-          e.preventDefault()
-          void add()
-        }}
-      >
+      <div className="mt-3 flex items-center gap-2">
         <label htmlFor={addId} className="sr-only">
           Nouveau gage
         </label>
@@ -267,30 +280,21 @@ function GagesEditor({
           placeholder="Nouveau gage… 😈"
           enterKeyHint="done"
           onChange={(e) => setNewGage(e.target.value)}
+          onKeyDown={onEnter(() => void add())}
           className={`${INPUT_CLASS} min-w-0 flex-1 bg-surface!`}
         />
         <MiniButton onClick={() => void add()} disabled={!clean(newGage)} ariaLabel="Ajouter le gage">
           ➕ Ajouter
         </MiniButton>
-      </form>
+      </div>
     </div>
   )
 }
 
-function IconButton({
-  children,
-  label,
-  onClick,
-  type = 'button',
-}: {
-  children: string
-  label: string
-  onClick?: () => void
-  type?: 'button' | 'submit'
-}) {
+function IconButton({ children, label, onClick }: { children: string; label: string; onClick: () => void }) {
   return (
     <motion.button
-      type={type}
+      type="button"
       onClick={onClick}
       whileTap={{ scale: 0.8 }}
       aria-label={label}

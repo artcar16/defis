@@ -3,7 +3,9 @@
  * l'avatar, le compteur « 4 / 8 badges » et une petite jauge à la couleur du joueur.
  */
 import { motion, useReducedMotion } from 'motion/react'
+import { NBSP, plural, pluralWord } from '../../core/fr'
 import type { Player, PlayerId } from '../../core/types'
+import { tint } from '../../ui/color'
 import { Avatar, AnimatedNumber, playerStyle, springy } from '../../ui/kit'
 import type { ShowcaseCount } from './model'
 
@@ -34,7 +36,7 @@ export function PlayerSwitch({
             type="button"
             role="radio"
             aria-checked={active}
-            aria-label={`${o.label} : ${o.count.unlocked} badges sur ${o.count.total}`}
+            aria-label={`${o.label}${NBSP}: ${plural(o.count.unlocked, 'badge')} sur ${o.count.total}`}
             onClick={() => onChange(o.player.id)}
             whileTap={{ scale: 0.95 }}
             transition={springy}
@@ -46,7 +48,7 @@ export function PlayerSwitch({
                 layoutId={reduced ? undefined : 'badges-switch-pill'}
                 className="absolute inset-0 rounded-[22px]"
                 style={{
-                  background: 'color-mix(in oklab, var(--pc) 15%, transparent)',
+                  background: tint('var(--pc)', 15, 'transparent'),
                   boxShadow: 'inset 0 0 0 2.5px var(--pc)',
                 }}
                 transition={{ type: 'spring', stiffness: 500, damping: 36 }}
@@ -69,7 +71,7 @@ export function PlayerSwitch({
                   <span className="score-num text-[15px] text-muted">/ {o.count.total}</span>
                   {/* « badges » seulement si la place le permet (petits écrans : « 4 / 8 »). */}
                   <span className="hidden text-[13px] font-bold text-muted min-[380px]:inline">
-                    {o.count.unlocked > 1 ? 'badges' : 'badge'}
+                    {pluralWord(o.count.unlocked, 'badge')}
                   </span>
                 </span>
               </span>

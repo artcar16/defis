@@ -23,8 +23,11 @@ export interface WeekResults {
   loserLine: string | null
   /** Bilan des manches après celle-ci. */
   record: SeasonRecord
-  /** Badges débloqués pendant cette manche. */
-  badges: { player: Player; badge: BadgeState }[]
+  /**
+   * Badges obtenus pendant cette manche, y compris ceux regagnés (🏋️ chaque semaine,
+   * 📅 / 💅 chaque série, 👑 chaque triplé, 🪶 chaque palier). `tiers` : paliers 🪶 de la manche.
+   */
+  badges: { player: Player; badge: BadgeState; tiers: string[] }[]
 }
 
 export function useWeekResults(weekStart: DayKey | null): WeekResults | null {
@@ -46,11 +49,14 @@ export function useWeekResults(weekStart: DayKey | null): WeekResults | null {
       season.finished.filter((w) => w.weekStart <= week.weekStart),
     )
 
+    const inWeek = (d: DayKey | null) => d !== null && d >= week.weekStart && d <= week.weekEnd
     const badges: WeekResults['badges'] = []
     for (const player of [me, other]) {
       for (const badge of computeBadges(player.id, snapshot, season, today)) {
-        const days = [badge.unlockedOn, ...(badge.tiers?.map((t) => t.unlockedOn) ?? [])]
-        if (badge.unlocked && days.some((d) => d !== null && d >= week.weekStart && d <= week.weekEnd)) badges.push({ player, badge })
+        // unlockDays : chaque obtention (pas seulement la première).
+        if (!badge.unlocked || !badge.unlockDays.some(inWeek)) continue
+        const tiers = (badge.tiers ?? []).filter((t) => inWeek(t.unlockedOn)).map((t) => t.label)
+        badges.push({ player, badge, tiers })
       }
     }
 

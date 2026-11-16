@@ -3,10 +3,10 @@
  */
 import { motion, useReducedMotion } from 'motion/react'
 import { addDays } from '../../core/dates'
-import { formatPts } from '../../core/taunts'
+import { formatPts, frDate, NBSP, plural, ptsUnit, typo, weekRangeLabel } from '../../core/fr'
 import type { Player } from '../../core/types'
+import { deep, tint } from '../../ui/color'
 import { AnimatedNumber, Avatar, Pill, springy } from '../../ui/kit'
-import { deep, longDay, tint, weekRange } from '../weighin/format'
 import type { WeekResults } from './useWeekResults'
 
 export function LiveStandings({ results, meId }: { results: WeekResults; meId: string }) {
@@ -21,10 +21,10 @@ export function LiveStandings({ results, meId }: { results: WeekResults; meId: s
   return (
     <section className="pt-1 text-center" aria-label="Manche en cours">
       <Pill color="var(--color-unpeu)">
-        ⏳ {week.daysLeft >= 2 ? `Encore ${week.daysLeft} jours` : 'Dernier jour !'}
+        ⏳ {week.daysLeft >= 2 ? `Encore ${plural(week.daysLeft, 'jour')}` : `Dernier jour${NBSP}!`}
       </Pill>
       <h2 className="mt-2 font-display text-[28px] leading-tight font-bold text-ink">Manche {week.index}</h2>
-      <p className="text-[15px] font-semibold text-muted">{weekRange(week.weekStart, week.weekEnd)}</p>
+      <p className="text-[15px] font-semibold text-muted">{weekRangeLabel(week.weekStart, week.weekEnd)}</p>
 
       <div className="card mt-5 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-start gap-2 px-3 py-4">
         <Side player={left} total={week.scores[left.id]?.total ?? 0} leads={!tie && winner?.id === left.id} isMe={left.id === meId} reduced={reduced} />
@@ -33,7 +33,7 @@ export function LiveStandings({ results, meId }: { results: WeekResults; meId: s
       </div>
 
       <p className="mt-3 font-display text-[19px] font-semibold text-ink">{leaderLine}</p>
-      <p className="mt-0.5 text-[15px] font-semibold text-muted">Verdict {longDay(addDays(week.weekEnd, 1))} 🔔 Rien n’est joué !</p>
+      <p className="mt-0.5 text-[15px] font-semibold text-muted">{typo(`Verdict ${frDate(addDays(week.weekEnd, 1))} 🔔 Rien n’est joué !`)}</p>
     </section>
   )
 }
@@ -66,7 +66,7 @@ function Side({ player, total, leads, isMe, reduced }: { player: Player; total: 
       </p>
       <span className="flex items-baseline gap-1" style={{ color: deep(player.color, 82) }}>
         <AnimatedNumber value={total} className="text-[40px] leading-none" />
-        <span className="font-display text-[14px] font-semibold text-muted">pts</span>
+        <span className="font-display text-[14px] font-semibold text-muted">{ptsUnit(total)}</span>
       </span>
       <span className={`mt-1 text-[13px] font-bold text-muted ${leads ? '' : 'invisible'}`} aria-hidden={!leads}>
         en tête (provisoire)

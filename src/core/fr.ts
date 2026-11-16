@@ -9,9 +9,18 @@ import type { DayKey } from './types'
 /** Espace insécable (avant ! ? : ; % », après «, entre nombre et unité). */
 export const NBSP = ' '
 
-/** Le mot commence-t-il par une voyelle (ou un h muet courant) ? → élision. */
+/**
+ * Le mot commence-t-il par un son voyelle ? → élision (« d’Arthus », « d’Écrans au lit »).
+ * Y compte comme voyelle seulement devant une consonne (« d’Yves », mais « de Yasmine »),
+ * et quelques h muets courants (« d’habitude », « d’hier », mais « de huit »).
+ */
 export function startsWithVowelSound(word: string): boolean {
-  return /^[aeiouyàâäéèêëîïôöùûüœæ]/i.test(word.trim()) || /^h(?:abit|eur|ier|istoir|ui|um|ôt|ydrat|yg)/i.test(word.trim())
+  const w = word.trim()
+  return (
+    /^[aeiouàâäéèêëîïôöùûüœæ]/i.test(w) ||
+    /^y[^aeiouyàâäéèêëîïôöùûü]/i.test(w) ||
+    /^h(?:abit|eur|ier|istoir|uil|uîtr|um|ôt|ydrat|yg)/i.test(w)
+  )
 }
 
 /** « de Laetitia », « d’Arthus ». */
@@ -68,9 +77,9 @@ export function dayNumber(day: DayKey): string {
   return d === '1' ? '1er' : d
 }
 
-/** « 16 nov. », « 1er nov. » (month = 'MMM') ou « 16 novembre », « 1er novembre » ('MMMM'). */
+/** « 16 nov. », « 1er nov. » (month = 'MMM') ou « 16 novembre », « 1er novembre » ('MMMM'), insécable. */
 export function frDayMonth(day: DayKey, month: 'MMM' | 'MMMM' = 'MMM'): string {
-  return `${dayNumber(day)} ${formatDay(day, month)}`
+  return `${dayNumber(day)}${NBSP}${formatDay(day, month)}`
 }
 
 /**

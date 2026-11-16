@@ -9,6 +9,7 @@
 import { motion, useReducedMotion } from 'motion/react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { computeBadges, type BadgeState } from '../core/badges'
+import { deName } from '../core/fr'
 import type { Player, PlayerId } from '../core/types'
 import { useDuel } from '../data/DuelProvider'
 import { ScreenHeader, springy } from '../ui/kit'
@@ -45,13 +46,11 @@ export function BadgesScreen() {
   const [openId, setOpenId] = useState<string | null>(null)
   const openBadge = openId ? (badges.find((b) => b.id === openId) ?? null) : null
   const closeDetail = useCallback(() => setOpenId(null), [setOpenId])
-  const detail: DetailProps | null = openBadge
-    ? { badge: openBadge, player: viewed, isMe: viewingMe, today, daysLeftInWeek: season.current.daysLeft }
-    : null
+  const detail: DetailProps | null = openBadge ? { badge: openBadge, player: viewed, isMe: viewingMe, today } : null
 
   // Cérémonie des nouveaux badges (joueur connecté uniquement), après une courte pause
   // et jamais par-dessus une autre feuille (résultats de la semaine, pesée).
-  const { pending, dismiss } = useUnseenUnlocks(me.id, mine, today)
+  const { pending, dismiss } = useUnseenUnlocks(mine, today)
   const [armed, setArmed] = useState(false)
   useEffect(() => {
     const t = window.setTimeout(() => setArmed(true), CEREMONY_DELAY_MS)
@@ -65,7 +64,7 @@ export function BadgesScreen() {
       <ScreenHeader
         title="Badges"
         emoji="🏅"
-        subtitle={viewingMe ? 'Ta vitrine à trophées ✨' : `La vitrine de ${other.name} 👀`}
+        subtitle={viewingMe ? 'Ta vitrine à trophées ✨' : `La vitrine ${deName(other.name)} 👀`}
       />
 
       <PlayerSwitch
@@ -118,7 +117,7 @@ export function BadgesScreen() {
   )
 }
 
-/** « 🎯 Ton prochain badge : Frigo fermé 2 / 7 » — tap pour ouvrir la fiche. */
+/** « 🎯 Ton prochain badge : Frigo fermé 2 / 7 » : on le touche pour ouvrir la fiche. */
 function ClosestHint({
   badge,
   mine,
@@ -146,25 +145,26 @@ function ClosestHint({
         <span className="absolute -right-1 -bottom-1 text-base">🎯</span>
       </span>
       <span className="flex min-w-0 flex-1 flex-col gap-1">
-        <span className="flex items-baseline justify-between gap-2">
-          <span className="min-w-0 truncate text-[14px] leading-tight font-bold text-muted">
-            {mine ? 'Ton prochain badge' : `Le prochain de ${player.name}`}
-          </span>
-          {text && (
-            <span className="shrink-0 text-[14px] leading-tight font-bold text-muted">
-              <span className="score-num text-[16px] text-ink">{text.value}</span> {text.unit}
-            </span>
-          )}
+        <span className="text-[14px] leading-tight font-bold text-muted">
+          {mine ? 'Ton prochain badge' : `Le prochain ${deName(player.name)}`}
         </span>
         <span className="truncate font-display text-[17px] leading-tight font-semibold text-ink">{badge.name}</span>
-        <span className="block h-2 w-full overflow-hidden rounded-full bg-surface">
-          <motion.span
-            className="block h-full rounded-full"
-            style={{ background: player.color }}
-            initial={{ width: 0 }}
-            animate={{ width: `${Math.max(pct, 4)}%` }}
-            transition={{ type: 'spring', stiffness: 140, damping: 20, delay: 0.2 }}
-          />
+        {/* La barre, et la progression à sa droite (sur une seule ligne, même sur iPhone SE). */}
+        <span className="flex items-center gap-2">
+          <span className="block h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-surface">
+            <motion.span
+              className="block h-full rounded-full"
+              style={{ background: player.color }}
+              initial={{ width: 0 }}
+              animate={{ width: `${Math.max(pct, 4)}%` }}
+              transition={{ type: 'spring', stiffness: 140, damping: 20, delay: 0.2 }}
+            />
+          </span>
+          {text && (
+            <span className="shrink-0 text-[13px] leading-none font-bold whitespace-nowrap text-muted">
+              <span className="score-num text-[15px] text-ink">{text.value}</span> {text.unit}
+            </span>
+          )}
         </span>
       </span>
       <span className="text-2xl leading-none text-muted" aria-hidden="true">

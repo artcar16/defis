@@ -67,7 +67,8 @@ export function RingScreen() {
 
       <Reveal index={i++}>
         <div className="space-y-3">
-          <div className="grid grid-cols-2 items-stretch gap-3">
+          {/* Côte à côte dès 360 px ; en dessous (iPhone SE), l'une sous l'autre pour ne pas couper les prénoms. */}
+          <div className="grid grid-cols-1 items-stretch gap-3 min-[360px]:grid-cols-2">
             <RecordTile />
             <LastRoundTile />
           </div>

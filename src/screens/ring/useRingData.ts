@@ -4,6 +4,7 @@
  * Ne dépend que du snapshot (démo aujourd'hui, Supabase demain).
  */
 import { useMemo } from 'react'
+import { RULES } from '../../config/rules'
 import { addDays, diffDays, isoDayOf } from '../../core/dates'
 import {
   activeHabits,
@@ -83,8 +84,9 @@ export function useRingData(): RingData {
     const weighInOf = (id: PlayerId) => snapshot.weighIns.find((w) => w.playerId === id && w.day === today) ?? null
 
     // Base de comparaison : les points « joués » jusqu'ici (jours passés, ou plus si quelqu'un a déjà rempli aujourd'hui).
-    const elapsed = season.notStarted ? 0 : Math.min(7, Math.max(1, diffDays(week.weekStart, today) + 1))
-    const basis = Math.max(100, 100 * (elapsed - 1), myTotal, otherTotal)
+    const { days, dailyMax } = RULES.week
+    const elapsed = season.notStarted ? 0 : Math.min(days, Math.max(1, diffDays(week.weekStart, today) + 1))
+    const basis = Math.max(dailyMax, dailyMax * (elapsed - 1), myTotal, otherTotal)
     const gap = myTotal - otherTotal
     const lean = season.notStarted ? 0 : -Math.tanh((gap / basis) * LEAN_GAIN)
 

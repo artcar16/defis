@@ -4,15 +4,17 @@
  */
 import { motion, useReducedMotion } from 'motion/react'
 import { useEffect, useState } from 'react'
-import { ISO_DAY_SHORT, addDays, formatDay, weekDays, weekStartOf } from '../../core/dates'
+import { formatDay } from '../../core/dates'
+import { dayNumber, deName, frDate, queName } from '../../core/fr'
+import type { DayKey } from '../../core/types'
 import { useDuel } from '../../data/DuelProvider'
+import { tint } from '../../ui/color'
 import { Avatar, Button, springy } from '../../ui/kit'
 import { useToast } from '../../ui/toast'
-import { deName, tint } from './format'
 import { Label, Section } from './ui'
 
 export function DemoSection({ index }: { index: number }) {
-  const { demo, snapshot, me, other, today, source } = useDuel()
+  const { demo, snapshot, me, other, today } = useDuel()
   const toast = useToast()
   const reduced = useReducedMotion() ?? false
   const [confirmReset, setConfirmReset] = useState(false)
@@ -26,16 +28,20 @@ export function DemoSection({ index }: { index: number }) {
   if (!demo) return null
 
   const realToday = demo.realToday()
-  const days = weekDays(weekStartOf(realToday))
-  const lastWeek = addDays(weekStartOf(today), -7)
+  // La vraie semaine + le lundi suivant (cérémonie de la manche, propositions acceptées).
+  const days = demo.travelDays()
+  const nextMondayDay = days.at(-1)
 
-  const travel = (day: string) => {
+  const travel = (day: DayKey) => {
     if (day === today) return
-    // Le voyage régénère les données : on garde la cérémonie « vue » si elle l'était déjà.
-    const seen = snapshot.seenResults.includes(lastWeek)
+    // La source garde tout ce que le joueur a fait (et les cérémonies déjà vues) : rien à refaire ici.
     demo.setToday(day)
-    if (seen && weekStartOf(day) === weekStartOf(today)) void source.markResultsSeen(lastWeek)
-    toast({ text: `⏳ Nous voilà ${formatDay(day, 'EEEE d MMMM')}${day === realToday ? ' (pour de vrai)' : ''}` })
+    const where = `${frDate(day)}${day === realToday ? ' (pour de vrai)' : day === nextMondayDay ? ' (lundi prochain)' : ''}`
+    toast(
+      day > today
+        ? { text: `⏳ Nous voilà ${where}. Tout ce que tu as fait est gardé 👍` }
+        : { text: `⏪ Retour à ${where}. Ce qui venait après est effacé 🧽` },
+    )
   }
 
   return (
@@ -59,7 +65,7 @@ export function DemoSection({ index }: { index: number }) {
               onClick={() => {
                 if (active) return
                 demo.switchPlayer(p.id)
-                toast({ text: `Tu joues maintenant ${p.name} ${p.emoji}`, color: p.color })
+                toast({ text: `Tu joues maintenant en tant ${queName(p.name)} ${p.emoji}`, color: p.color })
               }}
               whileTap={reduced ? undefined : { scale: 0.94 }}
               transition={springy}
@@ -79,29 +85,33 @@ export function DemoSection({ index }: { index: number }) {
       </div>
 
       <Label>Voyage dans le temps ⏳</Label>
-      <div role="radiogroup" aria-label="Jour de la démo" className="grid grid-cols-7 gap-1.5">
-        {days.map((d, i) => {
+      {/* 8 jours en 4 × 2 : des cibles larges (≥ 60 px), même sur iPhone SE. */}
+      <div role="radiogroup" aria-label="Jour de la démo" className="grid grid-cols-4 gap-1.5">
+        {days.map((d) => {
           const active = d === today
           const real = d === realToday
+          const next = d === nextMondayDay
           return (
             <motion.button
               key={d}
               type="button"
               role="radio"
               aria-checked={active}
-              aria-label={`${formatDay(d, 'EEEE d MMMM')}${real ? ' (vrai jour)' : ''}`}
+              aria-label={`${frDate(d)}${real ? ' (vrai jour)' : next ? ' (lundi prochain)' : ''}`}
               onClick={() => travel(d)}
-              whileTap={reduced ? undefined : { scale: 0.85 }}
+              whileTap={reduced ? undefined : { scale: 0.88 }}
               transition={springy}
-              className="relative flex h-16 flex-col items-center justify-center rounded-2xl font-display leading-none"
+              className="relative flex h-[68px] flex-col items-center justify-center rounded-2xl font-display leading-none"
               style={{
-                background: active ? me.color : 'var(--color-surface)',
-                color: active ? '#fff' : 'var(--color-ink-soft)',
+                // Couleur du joueur en version lisible (fond assombri ou encre foncée si besoin).
+                background: active ? `var(--me-btn, ${me.color})` : 'var(--color-surface)',
+                color: active ? 'var(--me-ink, #fff)' : 'var(--color-ink-soft)',
                 boxShadow: active ? `0 4px 0 color-mix(in oklab, ${me.color} 65%, black)` : '0 3px 0 var(--color-line)',
               }}
             >
-              <span className="text-[13px] font-semibold opacity-80">{ISO_DAY_SHORT[i]}</span>
-              <span className="mt-1 text-[19px] font-bold">{formatDay(d, 'd')}</span>
+              <span className="text-[13px] font-semibold opacity-80">{formatDay(d, 'EEE')}</span>
+              <span className="mt-1 text-[19px] font-bold">{dayNumber(d)}</span>
+              {next && <span className="mt-1 text-[11px] font-semibold opacity-80">prochain</span>}
               {real && (
                 <span className="absolute -top-2 text-[14px]" aria-hidden="true">
                   📍
@@ -111,8 +121,9 @@ export function DemoSection({ index }: { index: number }) {
           )
         })}
       </div>
-      <p className="mt-2 px-1 text-center text-[15px] text-muted">
-        {today === realToday ? '📍 = le vrai jour. Tape un jour pour y aller.' : `Démo réglée sur ${formatDay(today, 'EEEE d MMMM')} · 📍 = le vrai jour`}
+      <p className="mt-2.5 px-1 text-center text-[15px] leading-snug text-balance text-muted">
+        {today === realToday ? '📍 = le vrai jour. ' : `Démo réglée sur ${frDate(today)}. 📍 = le vrai jour. `}
+        Le voyage garde ce que tu as fait (revenir en arrière efface la suite).
       </p>
 
       <div className="mt-4 flex flex-col gap-3">
@@ -129,11 +140,12 @@ export function DemoSection({ index }: { index: number }) {
           onClick={() => {
             if (!confirmReset) return setConfirmReset(true)
             setConfirmReset(false)
+            // Tout repart à zéro, y compris les cérémonies et badges déjà vus (ils sont dans la source).
             demo.reset()
             toast({ text: 'Démo remise à zéro 🔄' })
           }}
         >
-          {confirmReset ? '⚠️ Sûr ? Tape encore pour tout effacer' : '🔄 Remettre la démo à zéro'}
+          {confirmReset ? '⚠️ Sûr ? Tape encore pour tout effacer' : '🔄 Remettre la démo à zéro'}
         </Button>
       </div>
     </Section>

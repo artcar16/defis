@@ -5,11 +5,12 @@
 import { motion, useReducedMotion } from 'motion/react'
 import { RULES } from '../../config/rules'
 import { formatDay } from '../../core/dates'
+import { capitalize, frDayMonth, plural, ptsUnit } from '../../core/fr'
 import type { PlayerWeekScore } from '../../core/scoring'
 import type { DayKey, Player } from '../../core/types'
 import { formatPct } from '../../core/weight'
+import { deep, tint } from '../../ui/color'
 import { Avatar, Card, softSpring } from '../../ui/kit'
-import { capitalize, deep, tint } from '../weighin/format'
 import type { WeekResults } from './useWeekResults'
 
 const ROW = 'grid grid-cols-[64px_minmax(0,1fr)_minmax(0,1fr)] items-center gap-x-3'
@@ -42,7 +43,7 @@ export function DayBreakdown({ results, today }: { results: WeekResults; today: 
             <li key={day} className={`${ROW} min-h-11 rounded-[16px] px-0 ${isToday ? 'bg-sunken' : ''}`}>
               <span className="pl-1.5 font-display text-[15px] leading-tight font-semibold text-ink-soft">
                 {isToday ? 'Auj.' : capitalize(formatDay(day, 'EEE'))}
-                <span className="block text-[13px] font-medium text-muted">{formatDay(day, 'd MMM')}</span>
+                <span className="block text-[13px] font-medium text-muted">{frDayMonth(day)}</span>
               </span>
               {[
                 { p: left, d: da, o: db },
@@ -95,23 +96,24 @@ export function DayBreakdown({ results, today }: { results: WeekResults; today: 
             { p: left, s: a },
             { p: right, s: b },
           ].map(({ p, s }) => (
-            <span key={p.id} className="flex items-baseline gap-1">
-              <span className="score-num text-[28px] leading-none" style={{ color: deep(p.color, 80) }}>
-                {s.total}
-              </span>
-              <span className="font-display text-[13px] font-semibold text-muted">pts</span>
+            <span key={p.id} className="flex min-w-0 items-baseline gap-0.5">
+              {/* La couronne avant le total : elle ne semble pas appartenir à la colonne voisine. */}
               {leader === p.id && (
-                <span className="ml-0.5 text-[20px] leading-none" aria-label={finished ? 'Gagnant' : 'En tête'} role="img">
+                <span className="text-[20px] leading-none" aria-label={finished ? 'Victoire' : 'En tête'} role="img">
                   <span className={finished ? '' : 'opacity-60'}>👑</span>
                 </span>
               )}
+              <span className="score-num text-[clamp(22px,7.4vw,28px)] leading-none" style={{ color: deep(p.color, 80) }}>
+                {s.total}
+              </span>
+              <span className="ml-0.5 font-display text-[13px] font-semibold text-muted">{ptsUnit(s.total)}</span>
             </span>
           ))}
         </li>
       </ul>
 
       <p className="mt-2 px-1 text-[13px] font-semibold text-muted">
-        ⭐ = journée parfaite · {RULES.week.days} jours × {RULES.week.dailyMax} + pesée {RULES.weighIn.maxPoints} = {RULES.week.days * RULES.week.dailyMax + RULES.weighIn.maxPoints} max
+        {`⭐ = journée parfaite · ${plural(RULES.week.days, 'jour')} × ${RULES.week.dailyMax} + pesée ${RULES.weighIn.maxPoints} = ${RULES.week.days * RULES.week.dailyMax + RULES.weighIn.maxPoints} max`}
       </p>
     </Card>
   )
@@ -120,7 +122,8 @@ export function DayBreakdown({ results, today }: { results: WeekResults; today: 
 function weighCaption(s: PlayerWeekScore, finished: boolean): string {
   if (!s.weighIn) return finished ? 'pas de pesée' : 'pas encore'
   if (s.weighIn.changePct === null) return '📍 départ'
-  return formatPct(s.weighIn.changePct)
+  // 2 décimales à côté des points (−0,46 % = 46 pts) : ce qu'on voit = ce qui compte.
+  return formatPct(s.weighIn.changePct, 2)
 }
 
 function PlayerHead({ player }: { player: Player }) {

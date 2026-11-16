@@ -3,9 +3,8 @@
  * la prochaine date, et l'aperçu des points pendant la saisie.
  */
 import { useMemo } from 'react'
-import { RULES } from '../../config/rules'
 import { nextMonday, weekStartOf } from '../../core/dates'
-import { canWeighIn, percentChange, weighInDateOfWeek, weighInPoints } from '../../core/scoring'
+import { canWeighIn, isInGoalZone, percentChange, weighInDateOfWeek, weighInPoints } from '../../core/scoring'
 import type { DayKey, GameSettings, WeighIn } from '../../core/types'
 import { lastWeighInBefore, weighInsOf } from '../../core/weight'
 import { useDuel } from '../../data/DuelProvider'
@@ -26,6 +25,7 @@ export interface WeighInPreview {
   points: number
   /** Variation depuis la toute première pesée (0 si c'est elle). */
   fromStartPct: number
+  /** Dans la zone objectif (isInGoalZone de core/scoring) : à passer à weighInReaction. */
   inGoalZone: boolean
 }
 
@@ -35,14 +35,13 @@ export function previewWeighIn(kg: number, prevKg: number | null, startKg: numbe
   const changePct = prevKg === null ? null : percentChange(prevKg, kg)
   const goalDistancePct = goalKg ? percentChange(goalKg, kg) : null
   const points = weighInPoints({ changePct, goalDistancePct })
-  const inGoalZone = goalDistancePct !== null && Math.abs(goalDistancePct) <= RULES.weighIn.goalTolerancePct + 1e-9
   return {
     first,
     changePct,
     goalDistancePct,
     points,
     fromStartPct: startKg === null ? 0 : percentChange(startKg, kg),
-    inGoalZone,
+    inGoalZone: isInGoalZone(goalDistancePct),
   }
 }
 
@@ -80,20 +79,4 @@ export function useWeighInData(): WeighInData {
       otherLatest: theirs.at(-1) ?? null,
     }
   }, [snapshot.weighIns, snapshot.settings, today, me.id, other.id])
-}
-
-/** Bornes et pas du sélecteur, en dixièmes de kg (entiers : pas d'erreurs d'arrondi). */
-export const TENTHS = {
-  min: Math.round(RULES.weighIn.minKg * 10),
-  max: Math.round(RULES.weighIn.maxKg * 10),
-  step: Math.max(1, Math.round(RULES.weighIn.stepKg * 10)),
-}
-
-export function clampTenths(t: number): number {
-  return Math.min(TENTHS.max, Math.max(TENTHS.min, Math.round(t)))
-}
-
-/** « 83,4 » (sans unité). */
-export function tenthsLabel(t: number): string {
-  return (t / 10).toFixed(1).replace('.', ',')
 }

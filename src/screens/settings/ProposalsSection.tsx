@@ -6,17 +6,21 @@
  */
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { nextMonday } from '../../core/dates'
+import { deName } from '../../core/fr'
 import type { Proposal } from '../../core/types'
 import { useDuel } from '../../data/DuelProvider'
+import { deep, tint } from '../../ui/color'
 import { burst } from '../../ui/confetti'
 import { Avatar, Button, springy } from '../../ui/kit'
-import { deName, fromLabel, tint } from './format'
+import { ANCHORS } from '../../ui/nav'
+import { fromLabel } from './format'
 import { MiniButton, Note, Section, useAction } from './ui'
 import { useDescribe } from './useDescribe'
 
 const RECENT_MAX = 4
 
-export const PROPOSALS_ANCHOR = 'propositions'
+/** Vert « Accepter » assombri : encre blanche à 5,2:1 au lieu de 2,3:1 sur le vert vif. */
+const ACCEPT_GREEN = 'color-mix(in oklab, var(--color-nickel) 72%, black)'
 
 export function ProposalsSection({ index }: { index: number }) {
   const { me, other, snapshot } = useDuel()
@@ -30,7 +34,7 @@ export function ProposalsSection({ index }: { index: number }) {
 
   return (
     <Section
-      id={PROPOSALS_ANCHOR}
+      id={ANCHORS.proposals}
       index={index}
       emoji="📬"
       title="Propositions"
@@ -82,7 +86,10 @@ export function ProposalsSection({ index }: { index: number }) {
       )}
 
       {empty && decided.length === 0 && (
-        <Note emoji="💡">Ajouter une habitude, la désactiver, changer son type, le jour de la pesée ou ton objectif : {other.name} doit valider.</Note>
+        <Note emoji="💡">
+          Ajouter une habitude, la désactiver, changer son type, le jour de la pesée ou ton objectif&nbsp;: {other.name} doit
+          valider.
+        </Note>
       )}
     </Section>
   )
@@ -137,24 +144,26 @@ function IncomingCard({ proposal }: { proposal: Proposal }) {
           </motion.span>
         </div>
         <div className="min-w-0 flex-1">
-          <div className="text-[15px] font-semibold text-ink-soft">{other.name} propose :</div>
+          <div className="text-[15px] font-semibold text-ink-soft">{other.name} propose&nbsp;:</div>
           <div className="font-display text-[19px] leading-snug font-semibold text-balance text-ink">{text.title}</div>
           {text.detail && <div className="mt-0.5 text-[15px] leading-snug text-muted">{text.detail}</div>}
         </div>
       </div>
-      <div className="mt-3.5 grid grid-cols-2 gap-2.5">
+      {/* iPhone SE : les deux boutons l'un sous l'autre, sinon « Accepter ✅ » passe sur 2 lignes. */}
+      <div className="mt-3.5 grid grid-cols-1 gap-2.5 min-[360px]:grid-cols-2">
         <Button
-          color="var(--color-nickel)"
+          color={ACCEPT_GREEN}
+          className="px-3 whitespace-nowrap"
           disabled={busy}
           onClick={(e) => void answer(true, e.currentTarget)}
         >
           Accepter ✅
         </Button>
-        <Button variant="soft" disabled={busy} onClick={() => void answer(false)}>
+        <Button variant="soft" className="px-3 whitespace-nowrap" disabled={busy} onClick={() => void answer(false)}>
           Refuser ❌
         </Button>
       </div>
-      <p className="mt-2.5 text-center text-[15px] text-muted">Si tu acceptes : {fromLabel(monday)}</p>
+      <p className="mt-2.5 text-center text-[15px] text-muted">Si tu acceptes&nbsp;: {fromLabel(monday)}</p>
     </motion.article>
   )
 }
@@ -174,12 +183,13 @@ function MineRow({ proposal }: { proposal: Proposal }) {
       animate={{ opacity: 1, scale: 1 }}
       exit={reduced ? { opacity: 0 } : { opacity: 0, scale: 0.85, x: -60 }}
       transition={springy}
-      className="flex items-center gap-3 rounded-3xl border-[3px] border-dashed border-line px-3 py-3"
+      // flex-wrap : sur iPhone SE, « Annuler » passe dessous au lieu d'écraser le texte.
+      className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-3xl border-[3px] border-dashed border-line px-3 py-3"
     >
       <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-sunken text-[26px] leading-none" aria-hidden="true">
         {text.emoji}
       </span>
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 basis-32">
         <div className="font-display text-[17px] leading-snug font-semibold text-ink">{text.title}</div>
         <div className="text-[15px] leading-snug text-muted">
           <motion.span
@@ -193,13 +203,15 @@ function MineRow({ proposal }: { proposal: Proposal }) {
           En attente {deName(other.name)}
         </div>
       </div>
-      <MiniButton
-        onClick={() => void run(() => source.cancelProposal(proposal.id), 'Proposition annulée 🙅')}
-        disabled={busy}
-        ariaLabel={`Annuler : ${text.title}`}
-      >
-        Annuler
-      </MiniButton>
+      <span className="ml-auto">
+        <MiniButton
+          onClick={() => void run(() => source.cancelProposal(proposal.id), 'Proposition annulée 🙅')}
+          disabled={busy}
+          ariaLabel={`Annuler\u00a0: ${text.title}`}
+        >
+          Annuler
+        </MiniButton>
+      </span>
     </motion.article>
   )
 }
@@ -228,7 +240,7 @@ function DecidedRow({ proposal }: { proposal: Proposal }) {
       </span>
       <div className="min-w-0 flex-1">
         <div className="text-[15px] leading-snug font-semibold text-ink">{text.title}</div>
-        <div className="text-[15px] leading-snug font-semibold" style={{ color: accepted ? 'color-mix(in oklab, var(--color-nickel) 70%, var(--color-ink))' : 'var(--color-muted)' }}>
+        <div className="text-[15px] leading-snug font-semibold" style={{ color: accepted ? deep('var(--color-nickel)', 70) : 'var(--color-muted)' }}>
           {status}
         </div>
       </div>

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { RULES } from '../config/rules'
-import { BADGES, badgesUnlockedOn, computeBadges, type BadgeId, type BadgeState } from './badges'
+import { BADGES, badgeUnlocksToRecord, badgesUnlockedOn, computeBadges, type BadgeId, type BadgeState } from './badges'
 import { addDays, weekEndOf } from './dates'
 import { buildSeason } from './season'
 import {
@@ -17,18 +17,33 @@ import {
   weighIns,
   type SnapshotInput,
 } from './test-helpers'
-import type { Checkin, Habit } from './types'
+import type { BadgeUnlock, Checkin, DuelSnapshot, Habit, WeighIn } from './types'
 
 const d = (n: number) => addDays(START, n)
 const habits = defaultHabits()
 const H = (id: string) => habits.find((h) => h.id === id)!
 
+/** Invariants de tous les badges : chaque obtention datée, dans l'ordre, cohérente avec count. */
+function expectConsistent(list: BadgeState[]) {
+  for (const b of list) {
+    expect([...b.unlockDays].sort(), b.id).toEqual(b.unlockDays)
+    expect(b.unlockDays.length, b.id).toBe(b.count)
+    expect(b.unlockedOn, b.id).toBe(b.unlockDays[0] ?? null)
+    expect(b.unlocked, b.id).toBe(b.unlockDays.length > 0)
+    expect(b.progress.current, b.id).toBeLessThanOrEqual(b.progress.target)
+    expect(b.progress.current, b.id).toBeGreaterThanOrEqual(0)
+  }
+}
+
 function badgesFor(player: string, input: SnapshotInput, today: string): Record<BadgeId, BadgeState> {
   const snapshot = makeSnapshot(input)
   const season = buildSeason(snapshot, today)
   const list = computeBadges(player, snapshot, season, today)
+  expectConsistent(list)
   return Object.fromEntries(list.map((b) => [b.id, b])) as Record<BadgeId, BadgeState>
 }
+
+const unlock = (playerId: string, badgeId: BadgeId, day: string, tier: number | null = null): BadgeUnlock => ({ playerId, badgeId, tier, day })
 
 describe('liste des badges', () => {
   it('9 badges, dans l’ordre de la galerie, avec les seuils de la config', () => {
@@ -121,7 +136,8 @@ describe('🏋️ Machine', () => {
     expect(badgesFor(A, { checkins }, addDays(W1, 6)).machine.unlocked).toBe(false)
   })
   it('progression de la manche en cours', () => {
-    expect(badgesFor(A, { checkins: fill(sport, W2, addDays(W2, 3)) }, addDays(W2, 3)).machine.progress).toEqual({ current: 4, target: 5 })
+    // Jeudi, sport fait lundi → jeudi : 4 / 5, et encore 3 séances jouables (vendredi → dimanche).
+    expect(badgesFor(A, { checkins: fill(sport, W2, addDays(W2, 3)) }, addDays(W2, 3)).machine.progress).toEqual({ current: 4, target: 5, possible: 3 })
   })
   it('plusieurs manches = plusieurs fois', () => {
     const checkins = [...fill(sport, W1, addDays(W1, 4)), ...fill(sport, W2, addDays(W2, 6))]
@@ -171,9 +187,9 @@ describe('🪶 Plume', () => {
     // Progression vers −5 %, en dixièmes de % : −2,0 % → 20 / 50.
     expect(b.progress).toEqual({ current: 20, target: 50 })
   })
-  it('pas encore −2 % : progression 13 / 20', () => {
+  it('pas encore −2 % : progression 12 / 20 (−1,25 %, arrondi vers le bas)', () => {
     const b = badgesFor(A, { weighIns: weighIns(raw([79])) }, sundays[0]).plume
-    expect(b).toMatchObject({ unlocked: false, unlockedOn: null, count: 0, progress: { current: 13, target: 20 } })
+    expect(b).toMatchObject({ unlocked: false, unlockedOn: null, count: 0, progress: { current: 12, target: 20 } })
   })
   it('tous les paliers : −5 % puis −10 %', () => {
     const b = badgesFor(A, { weighIns: weighIns(raw([78, 76, 74, 72])) }, sundays[3]).plume
@@ -316,5 +332,178 @@ describe('badgesUnlockedOn', () => {
     const list = computeBadges(A, snapshot, buildSeason(snapshot, d(6)), d(6))
     expect(badgesUnlockedOn(list, d(6)).map((b) => b.id)).toEqual(['manucure'])
     expect(badgesUnlockedOn(list, d(5))).toEqual([])
+  })
+})
+
+describe('🏋️ Machine : séances encore jouables (progress.possible)', () => {
+  const sport = H('a-sport')
+  const W2 = weekOf(2)
+  const fri = addDays(W2, 4)
+
+  it('vendredi, sport lundi et vendredi, jeudi oublié : jeudi (rattrapable), samedi, dimanche', () => {
+    const checkins = [ci(A, sport.id, W2, 'fait'), ci(A, sport.id, fri, 'fait')]
+    expect(badgesFor(A, { checkins }, fri).machine.progress).toEqual({ current: 2, target: 5, possible: 3 })
+  })
+  it('un « Pas fait » d’hier ne redevient pas une séance : plus assez de jours', () => {
+    const checkins = [ci(A, sport.id, W2, 'fait'), ci(A, sport.id, addDays(W2, 3), 'pasfait'), ci(A, sport.id, fri, 'fait')]
+    const p = badgesFor(A, { checkins }, fri).machine.progress
+    expect(p).toEqual({ current: 2, target: 5, possible: 2 })
+    expect(p.target - p.current).toBeGreaterThan(p.possible!)
+  })
+  it('aujourd’hui pas encore « Fait » (même « Pas fait ») : il est encore jouable', () => {
+    const checkins = [ci(A, sport.id, addDays(W2, 3), 'pasfait'), ci(A, sport.id, fri, 'pasfait')]
+    expect(badgesFor(A, { checkins }, fri).machine.progress.possible).toBe(3) // vendredi, samedi, dimanche
+  })
+  it('le lundi, le dimanche d’avant (manche close) ne compte pas', () => {
+    expect(badgesFor(A, {}, W2).machine.progress.possible).toBe(7)
+    expect(badgesFor(A, { checkins: [ci(A, sport.id, W2, 'fait')] }, W2).machine.progress).toEqual({ current: 1, target: 5, possible: 6 })
+  })
+  it('les jours où l’habitude sport ne compte plus sont exclus', () => {
+    const closed = makeHabit('a-sport', A, 'do', { badgeKey: 'sport', activeUntil: addDays(W2, 5) })
+    const others = habits.filter((h) => h.id !== 'a-sport')
+    expect(badgesFor(A, { habits: [...others, closed] }, fri).machine.progress.possible).toBe(2) // jeudi, vendredi
+  })
+})
+
+describe('🪶 Plume : progression arrondie vers le bas', () => {
+  const ref = addDays(START, -1)
+  const sun = addDays(START, 6)
+  const plumeAt = (kg: number) =>
+    badgesFor(A, { weighIns: weighIns([{ playerId: A, day: ref, weightKg: 80 }, { playerId: A, day: sun, weightKg: kg }]) }, sun).plume
+
+  it('−4,99 % : 49 / 50, jamais 50 / 50 tant que −5 % n’est pas atteint', () => {
+    const b = plumeAt(76.01)
+    expect(b.tiers?.[1].unlockedOn).toBeNull()
+    expect(b.progress).toEqual({ current: 49, target: 50 })
+  })
+  it('−5 % pile : palier atteint, on vise −10 %', () => {
+    const b = plumeAt(76)
+    expect(b.tiers?.[1].unlockedOn).toBe(sun)
+    expect(b.progress).toEqual({ current: 50, target: 100 })
+  })
+  it('plafonnée sous le palier même avec un flottant limite', () => {
+    const w: WeighIn[] = [
+      { playerId: A, day: ref, weightKg: null, changePct: null, fromStartPct: 0, goalDistancePct: null },
+      { playerId: A, day: sun, weightKg: null, changePct: -4.9999999, fromStartPct: -4.9999999, goalDistancePct: null },
+    ]
+    const b = badgesFor(A, { weighIns: w }, sun).plume
+    expect(b.tiers?.[1].unlockedOn).toBeNull()
+    expect(b.progress).toEqual({ current: 49, target: 50 })
+  })
+  it('deux paliers le même jour = deux obtentions ce jour-là', () => {
+    const b = plumeAt(75.9) // −5,125 %
+    expect(b.unlockDays).toEqual([sun, sun])
+    expect(b).toMatchObject({ count: 2, progress: { current: 51, target: 100 } })
+  })
+})
+
+describe('unlockDays : chaque obtention', () => {
+  it('séries : le dernier jour de chaque bloc complet', () => {
+    expect(badgesFor(A, { checkins: fill(H('a-ongles'), d(0), d(13)) }, d(13)).manucure.unlockDays).toEqual([d(6), d(13)])
+    expect(badgesFor(A, { checkins: fillPlayer(habits, A, d(0), d(13)) }, d(13)).assidu.unlockDays).toEqual([d(6), d(13)])
+  })
+  it('🏋️ : le 5e « Fait » de chaque manche (le badge se regagne)', () => {
+    const sport = H('a-sport')
+    const [W1, W2] = [weekOf(1), weekOf(2)]
+    const checkins = [...fill(sport, W1, addDays(W1, 4)), ...fill(sport, W2, addDays(W2, 6))]
+    expect(badgesFor(A, { checkins }, addDays(W2, 6)).machine.unlockDays).toEqual([addDays(W1, 4), addDays(W2, 4)])
+  })
+  it('👑 : le dimanche de chaque triplé', () => {
+    const checkins = [1, 2, 3, 4, 5, 6].flatMap((n) => fillPlayer(habits, A, weekOf(n), weekEndOf(weekOf(n))))
+    expect(badgesFor(A, { checkins }, weekOf(7)).royale.unlockDays).toEqual([weekEndOf(weekOf(3)), weekEndOf(weekOf(6))])
+  })
+  it('🔥 : une obtention par habitude qui atteint la série', () => {
+    const N = RULES.badges.unstoppableDays
+    const checkins = [...fill(H('l-grignotage'), d(0), d(N - 1)), ...fill(H('l-grattage'), d(0), d(N - 1))]
+    expect(badgesFor(L, { checkins }, d(N - 1)).inarretable).toMatchObject({ unlockDays: [d(N - 1), d(N - 1)], count: 2 })
+  })
+})
+
+describe('déblocages enregistrés : un badge débloqué le reste (décision 13)', () => {
+  const nails = H('a-ongles')
+  // 7 jours « Nickel », puis le 7e (aujourd'hui) corrigé en « Un peu » : le calcul ne le voit plus.
+  const corrected = [...fill(nails, d(0), d(5)), ci(A, nails.id, d(6), 'unpeu')]
+
+  it('💅 recalculé verrouillé, mais enregistré → toujours débloqué', () => {
+    expect(badgesFor(A, { checkins: corrected }, d(6)).manucure.unlocked).toBe(false)
+    const b = badgesFor(A, { checkins: corrected, badgeUnlocks: [unlock(A, 'manucure', d(6))] }, d(6)).manucure
+    expect(b).toMatchObject({ applicable: true, unlocked: true, unlockedOn: d(6), unlockDays: [d(6)], count: 1, progress: { current: 7, target: 7 } })
+  })
+  it('🪶 pesée du jour corrigée sous −2 % : le palier reste, la progression suit la vraie perte', () => {
+    const ref = addDays(START, -1)
+    const sun = d(6)
+    const w = weighIns([{ playerId: A, day: ref, weightKg: 80 }, { playerId: A, day: sun, weightKg: 78.5 }]) // −1,875 %
+    expect(badgesFor(A, { weighIns: w }, sun).plume.unlocked).toBe(false)
+    const b = badgesFor(A, { weighIns: w, badgeUnlocks: [unlock(A, 'plume', sun, 2)] }, sun).plume
+    expect(b).toMatchObject({ unlocked: true, unlockedOn: sun, count: 1, progress: { current: 18, target: 50 } })
+    expect(b.tiers?.map((t) => t.unlockedOn)).toEqual([sun, null, null])
+  })
+  it('unlockedOn = le plus ancien des deux', () => {
+    const checkins = fill(nails, d(0), d(6))
+    // Enregistré plus tôt (même obtention, recalculée plus tard) → on garde l'enregistré.
+    const sport = H('a-sport')
+    const W1 = weekOf(1)
+    const machine = [...fill(sport, W1, addDays(W1, 3)), ci(A, sport.id, addDays(W1, 4), 'pasfait'), ci(A, sport.id, addDays(W1, 5), 'fait')]
+    const m = badgesFor(A, { checkins: machine, badgeUnlocks: [unlock(A, 'machine', addDays(W1, 4))] }, addDays(W1, 5)).machine
+    expect(m).toMatchObject({ unlockedOn: addDays(W1, 4), unlockDays: [addDays(W1, 4)], count: 1 })
+    // Enregistré plus tard qu'une obtention calculée : rien ne change.
+    const b = badgesFor(A, { checkins, badgeUnlocks: [unlock(A, 'manucure', d(9))] }, d(9)).manucure
+    expect(b).toMatchObject({ unlockedOn: d(6), unlockDays: [d(6)], count: 1 })
+  })
+  it('une obtention perdue puis une nouvelle : les deux comptent', () => {
+    const checkins = [...corrected, ...fill(nails, d(7), d(13))]
+    const b = badgesFor(A, { checkins, badgeUnlocks: [unlock(A, 'manucure', d(6))] }, d(13)).manucure
+    expect(b).toMatchObject({ unlockedOn: d(6), unlockDays: [d(6), d(13)], count: 2 })
+  })
+  it('seulement les déblocages du joueur', () => {
+    expect(badgesFor(A, { checkins: corrected, badgeUnlocks: [unlock(L, 'manucure', d(6))] }, d(6)).manucure.unlocked).toBe(false)
+  })
+  it('un badge enregistré reste affiché même s’il ne concerne plus le joueur', () => {
+    const b = badgesFor(L, { badgeUnlocks: [unlock(L, 'manucure', d(3))] }, d(6)).manucure
+    expect(b).toMatchObject({ applicable: true, unlocked: true, unlockedOn: d(3), count: 1 })
+  })
+  it('snapshot sans badgeUnlocks (ancienne source) : pas de plantage', () => {
+    const snapshot = { ...makeSnapshot({ checkins: fill(nails, d(0), d(6)) }), badgeUnlocks: undefined } as unknown as DuelSnapshot
+    const list = computeBadges(A, snapshot, buildSeason(snapshot, d(6)), d(6))
+    expect(list.find((b) => b.id === 'manucure')?.unlocked).toBe(true)
+  })
+})
+
+describe('début du duel un autre jour qu’un lundi', () => {
+  it('les badges partent du lundi de la première manche, comme buildSeason', () => {
+    const checkins = fillPlayer(habits, A, d(0), d(6))
+    const b = badgesFor(A, { seasonStart: d(2), habits, checkins }, d(6)).assidu
+    expect(b).toMatchObject({ unlocked: true, unlockedOn: d(6) })
+  })
+})
+
+describe('badgeUnlocksToRecord', () => {
+  const ref = addDays(START, -1)
+  const sun = d(6)
+  const input = (badgeUnlocks: BadgeUnlock[] = []): SnapshotInput => ({
+    checkins: fill(H('a-ongles'), d(0), d(6)),
+    weighIns: weighIns([{ playerId: A, day: ref, weightKg: 80 }, { playerId: A, day: sun, weightKg: 75.9 }]),
+    badgeUnlocks,
+  })
+  const toRecord = (inp: SnapshotInput, player = A) => {
+    const snapshot = makeSnapshot(inp)
+    return badgeUnlocksToRecord(player, computeBadges(player, snapshot, buildSeason(snapshot, sun), sun), snapshot.badgeUnlocks)
+  }
+
+  it('un badge = une ligne (sa première obtention), un palier 🪶 = une ligne', () => {
+    expect(toRecord(input())).toEqual([unlock(A, 'manucure', sun), unlock(A, 'plume', sun, 2), unlock(A, 'plume', sun, 5)])
+  })
+  it('ce qui est déjà enregistré n’est pas réenregistré', () => {
+    expect(toRecord(input([unlock(A, 'manucure', sun), unlock(A, 'plume', sun, 2)]))).toEqual([unlock(A, 'plume', sun, 5)])
+  })
+  it('les déblocages de l’autre ne comptent pas', () => {
+    expect(toRecord(input([unlock(L, 'manucure', sun)]))).toContainEqual(unlock(A, 'manucure', sun))
+  })
+  it('idempotent : une fois enregistré, plus rien à enregistrer', () => {
+    const first = toRecord(input())
+    expect(toRecord(input(first))).toEqual([])
+  })
+  it('rien de débloqué → rien à enregistrer', () => {
+    expect(toRecord({}, L)).toEqual([])
   })
 })

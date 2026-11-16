@@ -17,16 +17,24 @@ import {
   type DotItemDotProps,
   type TooltipContentProps,
 } from 'recharts'
+import { frDate, frDayMonth, NBSP } from '../../core/fr'
 import type { DayKey, Player, PlayerId, WeighIn } from '../../core/types'
 import { formatPct, weighInsOf } from '../../core/weight'
+import { deep, tint } from '../../ui/color'
 import { Avatar, Card, springy } from '../../ui/kit'
-import { axisPct, deep, mediumDay, shortDay, tint } from './format'
+import { axisPct } from './format'
 
 /** Une pesée sur l'axe du temps : % depuis le départ de chaque joueur pesé ce jour-là. */
 interface Row {
   day: DayKey
   pct: Partial<Record<PlayerId, number>>
 }
+
+/** « dim. 1er nov. » */
+const weighDay = (day: DayKey) => frDate(day, { weekday: 'EEE', month: 'MMM' })
+
+/** Graduation de l'axe du temps : « 25 oct. », « 1er nov. ». */
+const tickDay = (day: DayKey) => frDayMonth(day)
 
 /** Durée de l'animation de tracé des courbes (ms). */
 const DRAW_MS = 900
@@ -128,7 +136,7 @@ function RaceTooltip({ active, payload, label, players }: TooltipContentProps & 
   if (!row) return null
   return (
     <div className="card min-w-44 px-3.5 py-2.5 shadow-[var(--shadow-pop)]">
-      <p className="font-display text-[14px] font-semibold text-muted">⚖️ Pesée du {mediumDay(label)}</p>
+      <p className="font-display text-[14px] font-semibold text-muted">⚖️ Pesée du {weighDay(label)}</p>
       <ul className="mt-1.5 space-y-1">
         {players.map((p) => {
           const v = row.pct[p.id]
@@ -186,7 +194,10 @@ function RaceChip({ series }: { series: Series }) {
             </div>
             <span className="score-num text-[13px] text-ink-soft">{Math.round(progress * 100)}&nbsp;%</span>
           </div>
-          <p className="mt-1 truncate text-[13px] font-bold text-ink-soft">🎯 Objectif {formatPct(goal)}</p>
+          {/* Sur iPhone SE, la valeur passe à la ligne plutôt que d'être coupée. */}
+          <p className="mt-1 text-[13px] leading-snug font-bold text-ink-soft">
+            🎯 Objectif <span className="whitespace-nowrap">{formatPct(goal)}</span>
+          </p>
         </div>
       ) : (
         <p className="mt-1.5 text-[13px] font-bold text-ink-soft">{pct === undefined ? 'Pas encore de pesée ⚖️' : 'depuis le départ'}</p>
@@ -236,7 +247,7 @@ export function WeightRace({ weighIns, me, other }: { weighIns: WeighIn[]; me: P
               />
               <XAxis
                 dataKey="day"
-                tickFormatter={shortDay}
+                tickFormatter={tickDay}
                 tick={{ fill: 'var(--color-muted)', fontSize: 12, fontWeight: 700 }}
                 axisLine={false}
                 tickLine={false}
@@ -286,7 +297,7 @@ export function WeightRace({ weighIns, me, other }: { weighIns: WeighIn[]; me: P
             ⚖️
           </span>
           <p className="mt-2 font-display text-[17px] font-semibold text-ink">
-            {rows.length === 0 ? 'Pas encore de pesée' : 'Le départ est donné !'}
+            {rows.length === 0 ? 'Pas encore de pesée' : `Le départ est donné${NBSP}!`}
           </p>
           <p className="mt-1 text-[15px] text-ink-soft">La course commence dès la prochaine pesée 🏁</p>
         </div>
@@ -294,7 +305,7 @@ export function WeightRace({ weighIns, me, other }: { weighIns: WeighIn[]; me: P
 
       {/* Version texte du graphique, pour les lecteurs d'écran. */}
       <table className="sr-only">
-        <caption>Évolution en % depuis la première pesée</caption>
+        <caption>Évolution en{NBSP}% depuis la première pesée</caption>
         <thead>
           <tr>
             <th scope="col">Pesée</th>
@@ -308,7 +319,7 @@ export function WeightRace({ weighIns, me, other }: { weighIns: WeighIn[]; me: P
         <tbody>
           {rows.map((r) => (
             <tr key={r.day}>
-              <th scope="row">{mediumDay(r.day)}</th>
+              <th scope="row">{weighDay(r.day)}</th>
               {players.map((p) => (
                 <td key={p.id}>{formatPct(r.pct[p.id])}</td>
               ))}
@@ -319,7 +330,7 @@ export function WeightRace({ weighIns, me, other }: { weighIns: WeighIn[]; me: P
 
       {hasRace && (
         <p className="mt-2 px-1 text-center text-[14px] leading-snug font-semibold text-muted">
-          📉 Ici, plus ça descend, plus ça avance ! Les kilos restent secrets 🤫
+          📉 Ici, plus ça descend, plus ça avance{NBSP}! Les kilos restent secrets 🤫
         </p>
       )}
     </Card>

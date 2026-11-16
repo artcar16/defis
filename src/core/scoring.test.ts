@@ -8,6 +8,7 @@ import {
   dailyScore,
   indexCheckins,
   isHabitActiveOn,
+  isInGoalZone,
   isWeighInDay,
   maxPointsFor,
   percentChange,
@@ -21,7 +22,8 @@ import {
   weighInPoints,
   type PlayerWeekScore,
 } from './scoring'
-import { A, L, START, ci, defaultHabits, fillPlayer, makeHabit, scoringDataOf, weighIns } from './test-helpers'
+import { buildSeason } from './season'
+import { A, L, START, ci, defaultHabits, fillPlayer, makeHabit, makeSnapshot, scoringDataOf, weighIns } from './test-helpers'
 import type { Checkin } from './types'
 
 const MON = START // lundi 26 octobre 2026
@@ -172,6 +174,24 @@ describe('pesée : points', () => {
   })
 })
 
+describe('pesée : zone objectif', () => {
+  it('isInGoalZone : à ±1 % de l’objectif (bornes comprises, tolérance des flottants)', () => {
+    for (const d of [0, 0.5, -0.5, 1, -1, 1 + 1e-12, -1 - 1e-12]) expect(isInGoalZone(d), String(d)).toBe(true)
+    for (const d of [1.01, -1.01, 3, null, undefined, Number.NaN]) expect(isInGoalZone(d), String(d)).toBe(false)
+  })
+  it('suit la tolérance de la config', () => {
+    const rules = { ...RULES, weighIn: { ...RULES.weighIn, goalTolerancePct: 2 } }
+    expect(isInGoalZone(1.5, rules)).toBe(true)
+    expect(isInGoalZone(1.5)).toBe(false)
+  })
+  it('−0,995 % : 100 pts par la variation seule (arrondi), sans être dans la zone', () => {
+    const change = percentChange(80.4, 79.6)
+    expect(change).toBeCloseTo(-0.995, 3)
+    expect(weighInPoints({ changePct: change, goalDistancePct: null })).toBe(100)
+    expect(isInGoalZone(null)).toBe(false)
+  })
+})
+
 describe('pesée : jour J', () => {
   const settings = { weighInDays: [{ from: START, isoDay: 7 }] }
   it('dimanche par défaut', () => {
@@ -229,6 +249,14 @@ describe('fenêtre de saisie du check-in', () => {
   it('rien avant le début du duel', () => {
     expect(canEditCheckin(addDays(START, -1), START, settings)).toBe(false)
     expect(canEditCheckin(addDays(START, -1), addDays(START, -1), settings)).toBe(false)
+  })
+  it('début du duel un mercredi : aligné sur le lundi, comme les manches de buildSeason', () => {
+    const wed = addDays(START, 2)
+    const odd = { seasonStart: wed }
+    // Le mardi, on peut rattraper le lundi : il fait partie de la manche 1.
+    expect(canEditCheckin(START, addDays(START, 1), odd)).toBe(true)
+    expect(canEditCheckin(addDays(START, -1), START, odd)).toBe(false)
+    expect(buildSeason(makeSnapshot({ seasonStart: wed }), addDays(START, 1)).weeks[0].weekStart).toBe(START)
   })
 })
 

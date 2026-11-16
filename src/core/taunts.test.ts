@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { DEFAULT_GAGES } from '../config/defaults'
 import {
   CHECKIN_PHRASES,
   RESULTS_PHRASES,
@@ -7,12 +8,14 @@ import {
   type RingSituation,
 } from '../content/phrases'
 import { addDays } from './dates'
+import { NBSP as FR_NBSP, formatPts as frFormatPts, plural, typo } from './fr'
 import { weighInPoints } from './scoring'
 import {
   activeRingSituations,
   checkinState,
   dayBucket,
   fillTemplate,
+  formatPts,
   gapBucket,
   pickCheckinLine,
   pickRingTaunt,
@@ -42,13 +45,17 @@ function rng(seed: number) {
   }
 }
 
-/** Le texte vient-il de l'une des phrases d'une situation ? */
+/** Le texte vient-il de l'une des phrases d'une situation ? (espaces insécables et élisions comprises) */
 function fromSituation(text: string, situation: RingSituation): boolean {
-  return RING_PHRASES[situation].some((p) => templateRegex(p.text).test(text))
+  return RING_PHRASES[situation].some((p) => templateRegex(p.text).test(norm(text)))
 }
 function templateRegex(template: string): RegExp {
-  const parts = template.split(/\{\w+\}/).map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-  return new RegExp(`^${parts.join('.+?')}$`, 's')
+  const parts = template
+    .split(/\{\w+\}/)
+    .map((s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    // « de {x} » peut devenir « d’Arthus » (élision automatique).
+    .map((s) => s.replace(/(^|[^\p{L}])(d|qu)e $/u, '$1$2(?:e |’)'))
+  return new RegExp(`^${parts.join('.+?')}$`, 'su')
 }
 
 const arthus = makePlayer(A)
@@ -293,8 +300,8 @@ describe('pickRingTaunt', () => {
     const texts = Array.from({ length: 60 }, (_, s) =>
       pickRingTaunt(calm({ myBestStreak: mine, otherBestStreak: theirs, seed: addDays('2026-11-16', s) })),
     )
-    expect(texts.some((t) => t.includes('12 jours') && t.includes('💅 Ongles'))).toBe(true)
-    expect(texts.some((t) => t.includes('Laetitia') && t.includes('9 jours') && t.includes('🦟 Grattage'))).toBe(true)
+    expect(texts.some((t) => norm(t).includes('12 jours') && t.includes('💅 Ongles'))).toBe(true)
+    expect(texts.some((t) => t.includes('Laetitia') && norm(t).includes('9 jours') && t.includes('🦟 Grattage'))).toBe(true)
     // Une série de 2 jours ne compte pas encore.
     expect(activeRingSituations(calm({ myBestStreak: { ...mine, days: 2 } }))).not.toContain('myStreak')
   })
@@ -343,7 +350,7 @@ describe('pickCheckinLine', () => {
 
   it('journée parfaite : « Journée parfaite ! Tes ongles te disent merci 💅 »', () => {
     const lines = linesFor({ ongles: 'nickel', grignotage: 'nickel', sport: 'fait' })
-    expect(lines).toContain('Journée parfaite ! Tes ongles te disent merci 💅')
+    expect(lines).toContain(typo('Journée parfaite ! Tes ongles te disent merci 💅'))
     expect(lines.size).toBeGreaterThanOrEqual(3)
   })
 
@@ -406,9 +413,11 @@ describe('pickCheckinLine', () => {
 describe('weighInReaction', () => {
   it('tranches de points', () => {
     expect(weighInBucket(null, 0)).toBe('start')
+    expect(weighInBucket(null, 0, true)).toBe('start')
     expect(weighInBucket(-1.5, 100)).toBe('max')
     expect(weighInBucket(-1, 100)).toBe('max')
-    expect(weighInBucket(0.3, 100)).toBe('goal')
+    expect(weighInBucket(-1.5, 100, true)).toBe('max')
+    expect(weighInBucket(0.3, 100, true)).toBe('goal')
     expect(weighInBucket(-0.8, 80)).toBe('great')
     expect(weighInBucket(-0.4, 40)).toBe('good')
     expect(weighInBucket(-0.1, 10)).toBe('small')
@@ -430,8 +439,8 @@ describe('weighInReaction', () => {
     }
   })
   it('sans graine : toujours la même réaction (compatibilité)', () => {
-    expect(weighInReaction(null, 0)).toEqual(WEIGHIN_REACTIONS.start[0])
-    expect(weighInReaction(-0.5, 50)).toEqual({ emoji: WEIGHIN_REACTIONS.good[0].emoji, text: `50${NBSP}pts, c’est toujours ça de pris !` })
+    expect(weighInReaction(null, 0)).toEqual({ ...WEIGHIN_REACTIONS.start[0], text: typo(WEIGHIN_REACTIONS.start[0].text) })
+    expect(weighInReaction(-0.5, 50)).toEqual({ emoji: WEIGHIN_REACTIONS.good[0].emoji, text: `50${NBSP}pts, c’est toujours ça de pris${NBSP}!` })
     expect(norm(weighInReaction(-0.01, 1).text)).toMatch(/^1 pt[ ,.]/)
   })
 })
@@ -461,11 +470,219 @@ describe('resultsLine', () => {
     const losers = Array.from({ length: 40 }, (_, i) =>
       resultsLine('loser', arthus, laetitia, addDays('2026-11-16', i * 7), { stake: 'Massage de 15 min 💆' }),
     )
-    expect(losers.some((t) => t.includes('Massage de 15 min 💆'))).toBe(true)
+    // Le gage s'insère dans la phrase avec une minuscule.
+    expect(losers.some((t) => t.includes('massage de 15 min 💆'))).toBe(true)
   })
   it('sans prénom ni gage, pas de trou', () => {
     for (const kind of ['winner', 'loser', 'tie'] as const) {
       for (let i = 0; i < 20; i++) expect(resultsLine(kind, null, null, addDays('2026-11-16', i))).not.toMatch(/\{\w*\}/)
     }
+  })
+})
+
+// ─── Français : élisions, typographie, accords ──────────────────────────────
+
+/** « de Arthus », « que Écrans… » : élision oubliée. */
+const MISSING_ELISION = /(?<![\p{L}])(?:de|que|De|Que) (?=[AEIOUaeiouÀÂÉÈÊËÎÏÔÖÙÛÜàâéèêëîïôöùûüŒœ])/u
+/** Espace ordinaire là où il faut une insécable. */
+const BAD_SPACE = / [!?;:»%]|« /
+const ENGLISH = /\b(?:tap|go|vs|leader|round|ok|cool)\b/i
+const HABITS = [
+  { habitName: 'Ongles', emoji: '💅' },
+  { habitName: 'Eau', emoji: '💧' },
+  { habitName: 'Légumes', emoji: '🥦' },
+  { habitName: 'Écrans au lit', emoji: '📱' },
+]
+
+function expectClean(text: string | null, where: string) {
+  expect(text, where).not.toBeNull()
+  const t = text!
+  expect(t, where).not.toMatch(/[{}]|undefined|null|NaN/)
+  expect(t, where).not.toMatch(MISSING_ELISION)
+  expect(t, where).not.toMatch(BAD_SPACE)
+  expect(t, where).not.toMatch(/'/)
+  expect(t, where).not.toMatch(ENGLISH)
+  expect(typo(t), where).toBe(t)
+}
+
+describe('français', () => {
+  it('formatPts : une seule implémentation (core/fr.ts)', () => {
+    expect(formatPts).toBe(frFormatPts)
+    expect([0, 1, 2].map(formatPts)).toEqual([`0${NBSP}pt`, `1${NBSP}pt`, `2${NBSP}pts`])
+  })
+
+  it('fillTemplate élide « de » et « que » devant une voyelle', () => {
+    expect(fillTemplate('Victoire de {w} !', { w: 'Arthus' })).toBe(`Victoire d’Arthus${NBSP}!`)
+    expect(fillTemplate('Victoire de {w} !', { w: 'Laetitia' })).toBe(`Victoire de Laetitia${NBSP}!`)
+    expect(fillTemplate('Que {w} gagne, mieux que {w}', { w: 'Arthus' })).toBe('Qu’Arthus gagne, mieux qu’Arthus')
+    expect(fillTemplate('De {h} en {h}', { h: 'Écrans au lit' })).toBe('D’Écrans au lit en Écrans au lit')
+    // Pas d'élision devant un nombre, ni au milieu d'un mot (« aide »).
+    expect(fillTemplate('Plus que {n}, de {n}', { n: '8 pts' })).toBe('Plus que 8 pts, de 8 pts')
+    expect(fillTemplate('À l’aide {w}', { w: 'Arthus' })).toBe('À l’aide Arthus')
+    // Un trou manquant reste un trou manquant.
+    expect(fillTemplate('de {w}', {})).toBeNull()
+  })
+
+  it('fillTemplate applique la typographie française', () => {
+    expect(fillTemplate('Bilan : {a} ! « {b} » ?', { a: 1, b: 'x' })).toBe(`Bilan${NBSP}: 1${NBSP}! «${NBSP}x${NBSP}»${NBSP}?`)
+  })
+
+  it('toutes les phrases, remplies pour les deux joueurs et avec des habitudes perso : sans faute', () => {
+    for (const [me, other] of [[arthus, laetitia], [laetitia, arthus]]) {
+      for (const [leader, trailer] of [[me, other], [other, me]]) {
+        for (const h of HABITS) {
+          const vars = {
+            me: me.name, other: other.name, leader: leader.name, trailer: trailer.name,
+            gap: formatPts(1), myTotal: 300, otherTotal: 300, daysLeft: plural(1, 'jour'), hour: `21${FR_NBSP}h`,
+            maxPoints: formatPts(100), habit: h.habitName, emoji: h.emoji, days: plural(12, 'jour'),
+            myWins: 2, otherWins: 1, winStreak: 2,
+          }
+          for (const [situation, list] of Object.entries(RING_PHRASES)) {
+            for (const p of list) expectClean(fillTemplate(p.text, vars), `${situation} : ${p.text}`)
+          }
+          for (const p of CHECKIN_PHRASES) {
+            expectClean(fillTemplate(p.text, { name: me.name, score: 80, max: 100, left: plural(1, 'habitude'), habit: h.habitName, emoji: h.emoji }), p.text)
+          }
+        }
+        for (const g of DEFAULT_GAGES) {
+          for (const p of RESULTS_PHRASES) {
+            expectClean(fillTemplate(p.text, { winner: leader.name, loser: trailer.name, gap: formatPts(12), stake: g.charAt(0).toLowerCase() + g.slice(1) }), p.text)
+          }
+        }
+      }
+    }
+    for (const [bucket, list] of Object.entries(WEIGHIN_REACTIONS)) {
+      for (const r of list) for (const n of [0, 1, 50]) expectClean(fillTemplate(r.text, { points: formatPts(n) }), `${bucket} : ${r.text}`)
+    }
+  })
+
+  it('rien ne s’accorde avec {habit} (habitudes perso : « Eau », « Légumes »…)', () => {
+    const all = [...Object.values(RING_PHRASES).flat(), ...CHECKIN_PHRASES]
+    // Après {habit} : fin de phrase, ponctuation ou emoji, jamais un verbe ou un participe.
+    for (const p of all) expect(p.text, p.text).not.toMatch(/\{habit\} \p{L}/u)
+  })
+
+  it('Ring : « Il est 21 h », « remontada d’Arthus »', () => {
+    const evening = Array.from({ length: 40 }, (_, i) =>
+      pickRingTaunt(calm({ hour: 21, myToday: dayScore({ filled: 1, total: 3 }), seed: addDays('2026-11-16', i) })),
+    )
+    expect(evening.some((t) => t.includes(`Il est 21${NBSP}h`))).toBe(true)
+    const thursday = Array.from({ length: 60 }, (_, i) =>
+      pickRingTaunt(calm({ me: laetitia, other: arthus, isoDay: 4, daysLeft: 4, myTotal: 340, otherTotal: 300, seed: addDays('2026-11-19', i * 7) })),
+    )
+    expect(thursday.some((t) => t.includes('remontada d’Arthus'))).toBe(true)
+    expect(thursday.every((t) => !/de Arthus/.test(t))).toBe(true)
+  })
+})
+
+describe('pickCheckinLine : rattrapage d’hier (isToday: false)', () => {
+  type Answer = CheckinLineContext['answers'][number]
+  const sets: { kind: 'avoid' | 'do'; answer: Omit<Answer, 'value'> }[][] = [
+    [
+      { kind: 'avoid', answer: { habitName: 'Ongles', emoji: '💅', badgeKey: 'ongles' } },
+      { kind: 'avoid', answer: { habitName: 'Grignotage', emoji: '🍪', badgeKey: 'grignotage' } },
+      { kind: 'do', answer: { habitName: 'Sport', emoji: '🏃', badgeKey: 'sport' } },
+    ],
+    [
+      { kind: 'do', answer: { habitName: 'Eau', emoji: '💧', badgeKey: null } },
+      { kind: 'do', answer: { habitName: 'Légumes', emoji: '🥦', badgeKey: null } },
+      { kind: 'avoid', answer: { habitName: 'Écrans au lit', emoji: '📱', badgeKey: null } },
+    ],
+  ]
+  const VALUES = { avoid: [null, 'nickel', 'unpeu', 'craquage'], do: [null, 'fait', 'pasfait'] } as const
+  const pts = (v: CheckinValue | null) => (v === 'nickel' || v === 'fait' ? 10 : v === 'unpeu' ? 5 : 0)
+
+  /** Toutes les combinaisons de réponses, pour les deux joueurs. */
+  function* contexts(isToday: boolean | undefined): Generator<CheckinLineContext> {
+    for (const set of sets) {
+      const [a, b, c] = set
+      for (const va of VALUES[a.kind]) for (const vb of VALUES[b.kind]) for (const vc of VALUES[c.kind]) {
+        const answers: Answer[] = [{ ...a.answer, value: va }, { ...b.answer, value: vb }, { ...c.answer, value: vc }]
+        const filled = answers.filter((x) => x.value).length
+        const points = answers.reduce((sum, x) => sum + pts(x.value), 0)
+        for (const player of [arthus, laetitia]) {
+          for (let i = 0; i < 4; i++) {
+            yield {
+              player,
+              answers,
+              isToday,
+              seed: addDays('2026-11-16', i),
+              day: dayScore({ filled, total: 3, complete: filled === 3, points, score: Math.round((points / 30) * 100), perfect: points === 30 }),
+            }
+          }
+        }
+      }
+    }
+  }
+
+  it('au passé : jamais « demain » ni « aujourd’hui »', () => {
+    let hier = 0
+    for (const ctx of contexts(false)) {
+      const text = pickCheckinLine(ctx)
+      expect(text).not.toMatch(/demain|aujourd[’']hui/i)
+      expectClean(text, text)
+      if (/hier/i.test(text)) hier++
+    }
+    expect(hier).toBeGreaterThan(50) // les variantes au passé sortent bien
+  })
+
+  it('le jour même (par défaut) : « demain » est permis, jamais « hier »', () => {
+    let demain = 0
+    for (const ctx of contexts(undefined)) {
+      const text = pickCheckinLine(ctx)
+      expect(text).not.toMatch(/\bhier\b/i)
+      expectClean(text, text)
+      if (/demain/i.test(text)) demain++
+    }
+    expect(demain).toBeGreaterThan(50)
+  })
+
+  it('restant : « Plus que 1 habitude », « Encore 2 habitudes »', () => {
+    const lines = new Set<string>()
+    for (const ctx of contexts(true)) if (ctx.day.filled === 1 || ctx.day.filled === 2) lines.add(norm(pickCheckinLine(ctx)))
+    expect([...lines].some((t) => /(Plus que|Encore) 1 habitude\b/.test(t))).toBe(true)
+    expect([...lines].some((t) => /(Plus que|Encore) 2 habitudes\b/.test(t))).toBe(true)
+  })
+})
+
+describe('weighInReaction : zone objectif', () => {
+  const goalEmojis = WEIGHIN_REACTIONS.goal.map((r) => r.emoji)
+  it('−0,995 % → 100 pts par la variation seule : « max », pas « zone objectif »', () => {
+    expect(weighInBucket(-0.995, 100)).toBe('max')
+    expect(weighInBucket(-0.995, 100, true)).toBe('goal')
+    for (let i = 0; i < 20; i++) {
+      const r = weighInReaction(-0.995, 100, addDays('2026-11-22', i * 7))
+      expect(goalEmojis).not.toContain(r.emoji)
+      expect(r.text).not.toMatch(/objectif/i)
+    }
+  })
+  it('dans la zone objectif, sans avoir perdu 1 % : réaction 🎯', () => {
+    for (let i = 0; i < 10; i++) expect(goalEmojis).toContain(weighInReaction(0.3, 100, addDays('2026-11-22', i * 7), true).emoji)
+  })
+})
+
+describe('resultsLine : gage et perdant', () => {
+  const seeds = Array.from({ length: 40 }, (_, i) => addDays('2026-11-16', i * 7))
+  it('le gage s’insère en minuscule, l’emoji 😈 en tête', () => {
+    const lines = seeds.map((s) => resultsLine('loser', laetitia, arthus, s, { gap: 150, stake: 'Vaisselle pendant une semaine 🍽️' }))
+    expect(lines).toContain(typo('😈 Arthus, au programme : vaisselle pendant une semaine 🍽️'))
+  })
+  it('un gage qui commence par un prénom garde sa majuscule', () => {
+    const lines = seeds.map((s) => resultsLine('loser', laetitia, arthus, s, { stake: 'Laetitia choisit le resto 🍝' }))
+    expect(lines.some((t) => t.includes('au programme') && t.includes('Laetitia choisit le resto'))).toBe(true)
+  })
+  it('perdant : pas de « dès lundi » (la cérémonie s’ouvre après la manche), « à un biscuit près »', () => {
+    const lines = seeds.map((s) => norm(resultsLine('loser', laetitia, arthus, s, { gap: 3, stake: 'Massage' })))
+    expect(lines.every((t) => !/dès lundi/.test(t))).toBe(true)
+    expect(lines).toContain('Perdu de 3 pts, Arthus… Ça s’est joué à un biscuit près 🍪')
+  })
+  it('élision : « Victoire d’Arthus »', () => {
+    const lines = seeds.map((s) => resultsLine('winner', arthus, laetitia, s, { gap: 150 }))
+    expect(lines.some((t) => t.includes('Victoire d’Arthus') || t.includes('Victoire écrasante d’Arthus'))).toBe(true)
+    expect(lines.every((t) => !/de Arthus/.test(t))).toBe(true)
+  })
+  it('égalité : le gage pour les deux', () => {
+    const lines = seeds.map((s) => resultsLine('tie', arthus, laetitia, s, { stake: 'Corvée de courses 🛒' }))
+    expect(lines).toContain(typo('Égalité parfaite 🤝 Au programme pour les deux : corvée de courses 🛒'))
   })
 })

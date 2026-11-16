@@ -3,31 +3,12 @@
  * couronnes, série en cours et plus gros écart.
  */
 import { motion, useReducedMotion } from 'motion/react'
+import { formatPts, NBSP, plural, pluralWord } from '../../core/fr'
 import type { Season } from '../../core/season'
 import type { Player } from '../../core/types'
+import { deep, tint } from '../../ui/color'
 import { Avatar, Card, Pill, springy } from '../../ui/kit'
-import { deep, plural, shortDay, tint } from './format'
-
-/** Phrase taquine (jamais méchante) selon qui mène au bilan, du point de vue du joueur connecté. */
-function recordLine(me: Player, other: Player, mine: number, theirs: number, played: number): string {
-  if (played === 0) return 'Le tableau est encore vierge… premier verdict lundi 👀'
-  const pick = (list: string[]) => list[played % list.length]
-  if (mine > theirs) {
-    return pick([
-      `Tu mènes ${mine} – ${theirs}. Pas le moment de s'endormir sur ses lauriers 😏`,
-      `${mine} – ${theirs} pour toi ! ${other.name} prépare sa revanche, méfiance 👀`,
-      `Leader au bilan 👑 Garde la couronne bien vissée, ${me.name}.`,
-    ])
-  }
-  if (mine < theirs) {
-    return pick([
-      `${other.name} mène ${theirs} – ${mine}… la remontada, c'est un état d'esprit 🚀`,
-      `${theirs} – ${mine} pour ${other.name}. Rien n'est perdu, tout est à reprendre 💪`,
-      `Mené·e au bilan ? Parfait, les meilleures histoires commencent comme ça 🍿`,
-    ])
-  }
-  return pick([`${mine} partout ! Tout se joue maintenant 🤝🔥`, `Égalité parfaite au bilan. Qui va craquer en premier ? 😈`])
-}
+import { recordLine } from './format'
 
 function Side({ player, leader }: { player: Player; leader: boolean }) {
   const reduced = useReducedMotion() ?? false
@@ -48,14 +29,19 @@ function Side({ player, leader }: { player: Player; leader: boolean }) {
         )}
         <Avatar player={player} size="lg" />
       </div>
-      <span className="mt-1 max-w-full truncate font-display text-[17px] font-semibold" style={{ color: deep(player.color, 72) }}>
+      {/* Le prénom passe à la ligne plutôt que d'être coupé (jusqu'à 20 caractères). */}
+      <span
+        className="mt-1 max-w-full text-center font-display text-[17px] leading-tight font-semibold text-balance [overflow-wrap:anywhere]"
+        style={{ color: deep(player.color, 72) }}
+      >
         {player.name}
       </span>
     </div>
   )
 }
 
-export function RecordHero({ season, me, other }: { season: Season; me: Player; other: Player }) {
+/** `verdict` : quand tombe le premier verdict (« lundi »…), affiché tant qu'aucune manche n'est jouée. */
+export function RecordHero({ season, me, other, verdict }: { season: Season; me: Player; other: Player; verdict: string }) {
   const reduced = useReducedMotion() ?? false
   const { record, finished } = season
   const mine = record.wins[me.id] ?? 0
@@ -104,26 +90,29 @@ export function RecordHero({ season, me, other }: { season: Season; me: Player; 
               {theirs}
             </motion.span>
           </div>
-          <span className="mt-1 text-[13px] font-bold text-muted">{plural(played, 'manche')} jouée{played > 1 ? 's' : ''}</span>
+          <span className="mt-1 text-center text-[13px] font-bold text-muted">
+            {plural(played, 'manche')} {pluralWord(played, 'jouée')}
+          </span>
         </div>
         <Side player={other} leader={theirs > mine} />
       </div>
 
       <p className="mt-3 text-center text-[15px] leading-snug font-semibold text-balance text-ink-soft">
-        {recordLine(me, other, mine, theirs, played)}
+        {recordLine(me, other, mine, theirs, played, verdict)}
       </p>
 
       {played > 0 && (
         <div className="mt-3 flex flex-wrap justify-center gap-1.5">
           {streakPlayer && record.streak.count >= 2 && (
             <Pill color={streakPlayer.color}>
-              🔥 {streakPlayer.id === me.id ? 'Toi' : streakPlayer.name} : {record.streak.count} d'affilée
+              🔥 {streakPlayer.id === me.id ? 'Toi' : streakPlayer.name}
+              {NBSP}: {plural(record.streak.count, 'victoire')} d’affilée
             </Pill>
           )}
           {record.ties > 0 && <Pill>🤝 {plural(record.ties, 'égalité')}</Pill>}
           {biggest && (
-            <Pill>
-              💥 Plus gros écart : {biggest.outcome.gap} pts ({shortDay(biggest.weekStart)})
+            <Pill className="text-center text-balance">
+              💥 Plus gros écart{NBSP}: {formatPts(biggest.outcome.gap)} (manche{NBSP}{biggest.index})
             </Pill>
           )}
         </div>

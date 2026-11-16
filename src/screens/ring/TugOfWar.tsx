@@ -19,14 +19,21 @@ import {
   type Transition,
 } from 'motion/react'
 import { useEffect, useRef, type CSSProperties } from 'react'
+import { formatPts } from '../../core/fr'
 import type { Player } from '../../core/types'
+import { onColor, tint } from '../../ui/color'
 import { Avatar, softSpring } from '../../ui/kit'
 import type { Standing } from './useRingData'
 
 /** Course du nœud de part et d'autre du milieu, en % de la corde (au max, il touche les mains du leader). */
 const KNOT_RANGE = 34
+/**
+ * Retrait des lutteurs par rapport au bord de la carte, en px. Celui qui mène se penche (14°)
+ * et tire par à-coups (6 px) : il dépasse alors d'environ 12 px, qu'il faut garder dans la carte.
+ */
+const FIGHTER_INSET = 20
 /** Retrait de la corde de chaque côté (elle part de l'intérieur des avatars), en px. */
-const ROPE_INSET = 56
+const ROPE_INSET = FIGHTER_INSET + 48
 /** Largeur de référence de l'arène, pour placer le dégradé des « camps » sous le nœud. */
 const ARENA_REF_WIDTH = 358
 
@@ -82,8 +89,8 @@ export function TugOfWar({ left, right, leftStanding, lean, gap, bounceKey, puls
 
   const territory = useTransform(knot, (v) => {
     const at = ((ROPE_INSET + (v / 100) * (ARENA_REF_WIDTH - 2 * ROPE_INSET)) / ARENA_REF_WIDTH) * 100
-    const tint = (color: string, pct: number) => `color-mix(in oklab, ${color} ${pct}%, transparent)`
-    return `linear-gradient(90deg, ${tint(left.color, 24)} 0%, ${tint(left.color, 9)} ${at - 7}%, ${tint(right.color, 9)} ${at + 7}%, ${tint(right.color, 24)} 100%)`
+    const camp = (color: string, pct: number) => tint(color, pct, 'transparent')
+    return `linear-gradient(90deg, ${camp(left.color, 24)} 0%, ${camp(left.color, 9)} ${at - 7}%, ${camp(right.color, 9)} ${at + 7}%, ${camp(right.color, 24)} 100%)`
   })
 
   return (
@@ -102,11 +109,11 @@ export function TugOfWar({ left, right, leftStanding, lean, gap, bounceKey, puls
         milieu
       </div>
       {/* Ombres au sol sous les lutteurs. */}
-      {(['left-[16px]', 'right-[16px]'] as const).map((pos) => (
+      {(['left', 'right'] as const).map((pos) => (
         <div
           key={pos}
-          className={`absolute bottom-[22px] h-3 w-[72px] rounded-[50%] ${pos}`}
-          style={{ background: 'color-mix(in oklab, black 20%, transparent)', filter: 'blur(2px)' }}
+          className="absolute bottom-[22px] h-3 w-[72px] rounded-[50%]"
+          style={{ [pos]: FIGHTER_INSET + 8, background: 'color-mix(in oklab, black 20%, transparent)', filter: 'blur(2px)' }}
         />
       ))}
 
@@ -210,6 +217,8 @@ function Rope({
 
 /** L'étiquette « +25 pts » (couleur du leader) ou « égalité » (dorée), qui rebondit quand l'écart change. */
 function GapTag({ gap, leaderColor, reduced }: { gap: number; leaderColor: string | null; reduced: boolean }) {
+  // Fond assombri juste ce qu'il faut pour que l'encre reste lisible (corail, jaune…).
+  const lead = leaderColor ? onColor(leaderColor) : null
   return (
     <motion.div
       key={leaderColor ? `${leaderColor}:${gap}` : 'egal'}
@@ -218,12 +227,12 @@ function GapTag({ gap, leaderColor, reduced }: { gap: number; leaderColor: strin
       transition={{ type: 'spring', stiffness: 600, damping: 15 }}
       className="rounded-full px-2.5 py-0.5 font-display text-[14px] leading-tight font-bold whitespace-nowrap shadow-[var(--shadow-card)]"
       style={
-        leaderColor
-          ? { background: leaderColor, color: '#fff' }
+        lead
+          ? { background: lead.bg, color: lead.ink }
           : { background: 'var(--color-gold)', color: 'color-mix(in oklab, var(--color-gold-dark) 35%, black)' }
       }
     >
-      {leaderColor ? `+${gap} pts` : 'égalité'}
+      {lead ? `+${formatPts(gap)}` : 'égalité'}
     </motion.div>
   )
 }
@@ -270,12 +279,12 @@ function Fighter({
   }, [bounceKey, standing, reduced, controls])
 
   const sweaty = !calm && standing !== 'lead'
-  const sideClass = side === 'left' ? 'left-2' : 'right-2'
   const enter: Transition = { ...softSpring, delay: 0.05 }
 
   return (
     <motion.div
-      className={`absolute top-[34px] z-10 ${sideClass}`}
+      className="absolute top-[34px] z-10"
+      style={{ [side]: FIGHTER_INSET }}
       initial={reduced ? false : { x: 70 * out, opacity: 0 }}
       animate={{ x: shift, opacity: 1 }}
       transition={enter}

@@ -3,11 +3,19 @@
  * calculée, actions, et (en maquette) les commandes de démo.
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { badgeUnlocksToRecord, computeBadges } from '../core/badges'
 import { dayKeyAt, hourAt } from '../core/dates'
 import { buildSeason, type Season } from '../core/season'
 import type { DayKey, DuelSnapshot, Player, PlayerId } from '../core/types'
 import { DemoSource } from './demo/DemoSource'
 import type { Activity, DemoControls, DuelSource } from './source'
+
+/** Commandes de la maquette, telles que les écrans les voient. */
+export type DemoContext = DemoControls & {
+  /** Ancien nom de signInAs (« Jouer en tant que »). */
+  signIn(playerId: PlayerId): void
+  readonly signedIn: boolean
+}
 
 export interface DuelContextValue {
   source: DuelSource
@@ -22,8 +30,8 @@ export interface DuelContextValue {
   other: Player
   playerById: (id: PlayerId) => Player
   season: Season
-  /** Commandes de la maquette (null en production). */
-  demo: (DemoControls & { signIn(playerId: PlayerId): void; signedIn: boolean }) | null
+  /** Commandes de la maquette (null avec une vraie source). */
+  demo: DemoContext | null
   signedIn: boolean
   /** Dernière activité reçue (pour les toasts / animations). */
   lastActivity: (Activity & { at: number }) | null
@@ -31,13 +39,13 @@ export interface DuelContextValue {
 
 const DuelContext = createContext<DuelContextValue | null>(null)
 
-function createSource(): DemoSource {
+function createSource(): DuelSource {
   // Étape 5 : choisir SupabaseSource quand les clés sont présentes (et pas ?demo).
   return new DemoSource()
 }
 
 export function DuelProvider({ children }: { children: ReactNode }) {
-  const [source] = useState(createSource)
+  const [source] = useState<DuelSource>(createSource)
 
   const [snapshot, setSnapshot] = useState<DuelSnapshot>(() => source.getSnapshot())
   const [now, setNow] = useState<Date>(() => source.now())
@@ -51,11 +59,12 @@ export function DuelProvider({ children }: { children: ReactNode }) {
       setSignedIn(source.signedIn)
       if (activity) setLastActivity({ ...activity, at: Date.now() })
     })
-    source.scheduleOtherCheckin()
+    if (source instanceof DemoSource) source.scheduleOtherCheckin()
     const tick = window.setInterval(() => setNow(source.now()), 60_000)
     return () => {
       unsubscribe()
       window.clearInterval(tick)
+      source.dispose()
     }
   }, [source])
 
@@ -68,21 +77,33 @@ export function DuelProvider({ children }: { children: ReactNode }) {
   const me = playerById(snapshot.meId)
   const other = snapshot.players.find((p) => p.id !== snapshot.meId) ?? snapshot.players[1]
 
-  const demo = useMemo<DuelContextValue['demo']>(
-    () => ({
-      switchPlayer: (id) => source.switchPlayer(id),
-      simulateOtherCheckin: () => source.simulateOtherCheckin(),
-      setToday: (d) => source.setToday(d),
-      realToday: () => source.realToday(),
-      replayResults: () => source.replayResults(),
-      reset: () => source.reset(),
-      signIn: (id) => source.signIn(id),
+  // 🏅 Badges gravés (décision 16) : tout badge débloqué d'après le calcul est enregistré
+  // par la source, pour ne plus le perdre après une correction. Pas de boucle : une fois
+  // enregistré, badgeUnlocksToRecord ne le renvoie plus.
+  useEffect(() => {
+    if (!signedIn) return
+    const todo = badgeUnlocksToRecord(me.id, computeBadges(me.id, snapshot, season, today), snapshot.badgeUnlocks)
+    if (todo.length > 0) source.recordBadgeUnlocks(todo).catch(() => {})
+  }, [signedIn, me.id, snapshot, season, today, source])
+
+  const demo = useMemo<DemoContext | null>(() => {
+    if (!(source instanceof DemoSource)) return null
+    const d = source
+    return {
+      signInAs: (id) => d.signInAs(id),
+      signIn: (id) => d.signInAs(id),
+      travelDays: () => d.travelDays(),
+      switchPlayer: (id) => d.switchPlayer(id),
+      simulateOtherCheckin: () => d.simulateOtherCheckin(),
+      setToday: (day) => d.setToday(day),
+      realToday: () => d.realToday(),
+      replayResults: () => d.replayResults(),
+      reset: () => d.reset(),
       get signedIn() {
-        return source.signedIn
+        return d.signedIn
       },
-    }),
-    [source],
-  )
+    }
+  }, [source])
 
   const value: DuelContextValue = {
     source,

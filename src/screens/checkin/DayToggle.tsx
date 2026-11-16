@@ -4,9 +4,10 @@
  */
 import { AnimatePresence, motion, useAnimationControls, useReducedMotion } from 'motion/react'
 import type { ReactNode } from 'react'
+import { NBSP } from '../../core/fr'
+import { tint } from '../../ui/color'
 import { springy } from '../../ui/kit'
 import type { DayChoice } from './useCheckin'
-import { tint } from './format'
 
 export function DayToggle({
   choice,
@@ -41,7 +42,7 @@ export function DayToggle({
           onClick={tapYesterday}
           disabled={locked}
           reduced={reduced}
-          label={locked ? `Hier : ${lockReason}` : missingYesterday > 0 ? `Hier, ${missingYesterday} à remplir` : 'Hier'}
+          label={locked ? `Hier${NBSP}: ${lockReason}` : missingYesterday > 0 ? `Hier, ${missingYesterday} à remplir` : 'Hier'}
         >
           <span aria-hidden="true">{locked ? '🔒' : '⏪'}</span> Hier
           {!locked && missingYesterday > 0 && (

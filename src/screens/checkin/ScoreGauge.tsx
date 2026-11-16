@@ -4,15 +4,19 @@
  */
 import { AnimatePresence, motion, useAnimationControls, useInView, useReducedMotion } from 'motion/react'
 import { useEffect, useRef } from 'react'
+import { RULES } from '../../config/rules'
+import { plural } from '../../core/fr'
 import type { DayScore } from '../../core/scoring'
 import type { Player } from '../../core/types'
+import { deep, tint } from '../../ui/color'
 import { AnimatedNumber, VALUE_COLORS, springy } from '../../ui/kit'
-import { inkOf, plural, tint } from './format'
 import type { HabitRow } from './useCheckin'
 
 const SIZE = 148
 const STROKE = 17
 const R = (SIZE - STROKE) / 2
+/** Score maximum d'une journée (règles). */
+const MAX = RULES.week.dailyMax
 
 export function ScoreGauge({
   me,
@@ -31,7 +35,7 @@ export function ScoreGauge({
   const reduced = useReducedMotion() ?? false
   const ref = useRef<HTMLElement>(null)
   const inView = useInView(ref, { initial: true, margin: '-24px 0px 0px 0px' })
-  const pct = score.score / 100
+  const pct = score.score / MAX
 
   return (
     <>
@@ -77,7 +81,7 @@ export function ScoreGauge({
             <AnimatePresence mode="popLayout" initial={false}>
               <motion.p
                 key={line}
-                className="text-[16px] leading-snug font-bold text-ink"
+                className="text-[16px] leading-snug font-bold text-pretty text-ink"
                 initial={reduced ? { opacity: 0 } : { opacity: 0, y: 14, scale: 0.96 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={reduced ? { opacity: 0 } : { opacity: 0, y: -12 }}
@@ -135,7 +139,7 @@ function Gauge({
       <div className="absolute inset-0 grid place-items-center">
         <div className="flex flex-col items-center leading-none">
           <AnimatedNumber value={score.score} className="text-[min(52px,14vw,7svh)]" />
-          <span className="mt-0.5 font-display text-[16px] font-semibold text-muted">/100</span>
+          <span className="mt-0.5 font-display text-[16px] font-semibold text-muted">/{MAX}</span>
         </div>
       </div>
       <AnimatePresence>
@@ -196,13 +200,13 @@ function FloatingScore({ me, score, show, reduced }: { me: Player; score: DaySco
             className="flex items-center gap-2.5 rounded-full bg-surface py-1.5 pr-4 pl-1.5 shadow-[var(--shadow-pop)]"
             style={{ boxShadow: `inset 0 0 0 2.5px ${tint(color, 55, 'transparent')}, var(--shadow-pop)` }}
           >
-            <MiniRing pct={score.score / 100} color={color} reduced={reduced} />
+            <MiniRing pct={score.score / MAX} color={color} reduced={reduced} />
             <span
               className="font-display text-[20px] leading-none font-bold"
-              style={{ color: score.perfect ? 'var(--color-gold-dark)' : inkOf(me.color, 80) }}
+              style={{ color: score.perfect ? 'var(--color-gold-dark)' : deep(me.color, 80) }}
             >
               <AnimatedNumber value={score.score} />
-              <span className="text-[14px] text-muted">/100</span>
+              <span className="text-[14px] text-muted">/{MAX}</span>
             </span>
             <span className="font-display text-[15px] font-semibold text-muted">
               · {score.filled}/{score.total} {score.complete ? '✅' : ''}

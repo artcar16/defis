@@ -1,13 +1,14 @@
 /**
  * 📜 Historique des manches terminées (la plus récente en premier) : totaux,
  * gagnant 👑 ou égalité 🤝, enjeu et gage payé ✅ / 🫣. Toucher une manche
- * ouvre ses résultats.
+ * ouvre ses résultats ; la manche en cours ouvre son classement provisoire.
  */
 import { motion, useReducedMotion } from 'motion/react'
+import { frDayMonth, plural, typo } from '../../core/fr'
 import type { WeekView } from '../../core/season'
 import type { Player, PlayerId } from '../../core/types'
+import { deep, tint } from '../../ui/color'
 import { Avatar, Card, springy } from '../../ui/kit'
-import { deep, plural, shortDay, tint } from './format'
 
 function ScoreBar({ player, total, max, winner, delay }: { player: Player; total: number; max: number; winner: boolean; delay: number }) {
   const reduced = useReducedMotion() ?? false
@@ -77,32 +78,43 @@ function WeekRow({
       transition={springy}
       className="card block w-full overflow-hidden px-4 pt-3 pb-3 text-left"
       style={{ boxShadow: `inset 4px 0 0 ${accent}, var(--shadow-card)` }}
-      aria-label={`Manche ${week.index}, semaine du ${shortDay(week.weekStart)} : ${
-        winner ? `${winner.name} gagne` : 'égalité'
-      }, ${me.name} ${mine}, ${other.name} ${theirs}. Voir les résultats`}
+      aria-label={typo(
+        `Manche ${week.index}, semaine du ${frDayMonth(week.weekStart)} : ${
+          winner ? `victoire ${winner.id === me.id ? 'pour toi' : `pour ${winner.name}`}` : 'égalité'
+        }, ${me.name} ${mine}, ${other.name} ${theirs}. Voir les résultats`,
+      )}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="font-display text-[12px] font-semibold tracking-wide text-muted uppercase">Manche {week.index}</p>
-          <p className="font-display text-[18px] leading-tight font-semibold text-ink">Semaine du {shortDay(week.weekStart)}</p>
+      {/*
+       * Libellé, date et pastille du gagnant. Carte étroite (iPhone SE) : la pastille reste
+       * à côté de « Manche N » et la date prend toute la largeur, au lieu de s'écraser sur 3 lignes.
+       */}
+      <div className="@container">
+        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-2">
+          <p className="col-start-1 row-start-1 font-display text-[12px] font-semibold tracking-wide text-muted uppercase @max-[300px]:self-center">
+            Manche {week.index}
+          </p>
+          <p className="col-start-1 row-start-2 font-display text-[18px] leading-tight font-semibold text-ink @max-[300px]:col-span-2 @max-[300px]:mt-1">
+            {/* La date ne se coupe jamais en deux (« 2 / nov. »). */}
+            Semaine du <span className="whitespace-nowrap">{frDayMonth(week.weekStart)}</span>
+          </p>
+          <span
+            className="col-start-2 row-span-2 row-start-1 inline-flex items-center gap-1 self-start rounded-full px-3 py-1 font-display text-[14px] font-semibold @max-[300px]:row-span-1"
+            style={
+              winner
+                ? { background: tint(winner.color, 18), color: deep(winner.color, 72) }
+                : { background: 'color-mix(in oklab, var(--color-gold) 24%, var(--color-surface))', color: 'var(--color-ink)' }
+            }
+          >
+            {winner ? (
+              <>
+                👑 {winner.id === me.id ? 'Toi' : winner.name}
+                <span className="score-num text-[13px] opacity-80">+{outcome.gap}</span>
+              </>
+            ) : (
+              '🤝 Égalité'
+            )}
+          </span>
         </div>
-        <span
-          className="inline-flex shrink-0 items-center gap-1 rounded-full px-3 py-1 font-display text-[14px] font-semibold"
-          style={
-            winner
-              ? { background: tint(winner.color, 18), color: deep(winner.color, 72) }
-              : { background: 'color-mix(in oklab, var(--color-gold) 24%, var(--color-surface))', color: 'var(--color-ink)' }
-          }
-        >
-          {winner ? (
-            <>
-              👑 {winner.id === me.id ? 'Toi' : winner.name}
-              <span className="score-num text-[13px] opacity-80">+{outcome.gap}</span>
-            </>
-          ) : (
-            '🤝 Égalité'
-          )}
-        </span>
       </div>
 
       <div className="mt-3 space-y-2.5">
@@ -112,9 +124,9 @@ function WeekRow({
 
       <div className="mt-3 flex items-end justify-between gap-2 border-t-2 border-dashed border-line pt-2.5">
         <div className="min-w-0 space-y-1 text-[15px] leading-snug">
-          <p className="font-semibold text-ink-soft">
+          <p className="font-semibold text-balance text-ink-soft">
             <span aria-hidden="true">🎯 </span>
-            {week.meta?.stake ?? 'Pas d’enjeu cette fois'}
+            {week.meta?.stake ? typo(week.meta.stake) : 'Pas d’enjeu cette fois'}
           </p>
           {gages.map((g, i) => (
             <p key={i} className={`font-bold ${g.done ? 'text-ink-soft' : 'text-ink'}`}>
@@ -134,19 +146,22 @@ function WeekRow({
 export function WeekHistory({
   finished,
   current,
+  verdict,
   me,
   other,
   playerById,
   onOpen,
-  onCurrent,
 }: {
   finished: WeekView[]
+  /** La manche en cours (null si le duel n'a pas commencé). */
   current: WeekView | null
+  /** Quand tombe le premier verdict (« lundi », « lundi 30 novembre »), tant qu'aucune manche n'est finie. */
+  verdict: string
   me: Player
   other: Player
   playerById: (id: PlayerId) => Player
+  /** Ouvre les résultats d'une manche (provisoires pour la manche en cours). */
   onOpen: (weekStart: string) => void
-  onCurrent: () => void
 }) {
   const list = [...finished].reverse()
   return (
@@ -154,18 +169,21 @@ export function WeekHistory({
       {current && !current.finished && (
         <motion.button
           type="button"
-          onClick={onCurrent}
+          onClick={() => onOpen(current.weekStart)}
           whileTap={{ scale: 0.97 }}
           transition={springy}
           className="flex min-h-14 w-full items-center gap-3 rounded-[var(--radius-card)] border-2 border-dashed border-line px-4 py-2.5 text-left"
+          aria-label={`Manche ${current.index} en cours, encore ${plural(current.daysLeft, 'jour')}. Voir le classement provisoire`}
         >
           <span className="text-[28px] leading-none" aria-hidden="true">
             🥊
           </span>
           <span className="min-w-0 flex-1">
             <span className="block font-display text-[17px] font-semibold text-ink">Manche {current.index} en cours</span>
-            <span className="block text-[14px] font-semibold text-muted">
-              {current.daysLeft > 0 ? `Encore ${plural(current.daysLeft, 'jour')} pour écrire l'histoire ✍️` : 'Ça commence bientôt ⏳'}
+            <span className="block text-[14px] font-semibold text-balance text-muted">
+              {current.daysLeft > 1
+                ? `Encore ${plural(current.daysLeft, 'jour')} pour écrire l’histoire ✍️`
+                : 'Dernier jour pour écrire l’histoire ✍️'}
             </span>
           </span>
           <span className="font-display text-[28px] leading-none text-muted" aria-hidden="true">
@@ -180,7 +198,9 @@ export function WeekHistory({
             📜
           </span>
           <p className="mt-2 font-display text-[18px] font-semibold text-ink">Aucune manche terminée</p>
-          <p className="mt-1 text-[15px] text-ink-soft">Le premier verdict tombe lundi. Que le meilleur gagne 👑</p>
+          <p className="mt-1 text-[15px] text-balance text-ink-soft">
+            {typo(`Premier verdict ${verdict}. D’ici là, tous les coups (gentils) sont permis 😈`)}
+          </p>
         </Card>
       ) : (
         list.map((w) => (

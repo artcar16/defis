@@ -121,6 +121,8 @@ export function dailyScore(
 /**
  * Peut-on remplir ou corriger le check-in de `day` quand on est `today` ?
  * Aujourd'hui et hier seulement, et jamais par-dessus la fin d'une manche.
+ * Rien avant le lundi de la première manche (même règle que buildSeason, au cas où
+ * seasonStart ne serait pas un lundi).
  */
 export function canEditCheckin(
   day: DayKey,
@@ -130,7 +132,7 @@ export function canEditCheckin(
 ): boolean {
   const back = diffDays(day, today)
   if (back < 0 || back > rules.checkin.catchUpDays) return false
-  if (day < settings.seasonStart) return false
+  if (day < weekStartOf(settings.seasonStart)) return false
   if (!rules.checkin.catchUpAcrossWeeks && weekStartOf(day) !== weekStartOf(today)) return false
   return true
 }
@@ -174,6 +176,22 @@ export function percentChange(fromKg: number, toKg: number): number {
   return ((toKg - fromKg) / fromKg) * 100
 }
 
+/** Petite tolérance numérique pour les flottants (ex. 0.99999999 %). */
+const GOAL_EPS = 1e-9
+
+/**
+ * Est-on dans la zone objectif (à ±1 % de son poids objectif) ? `goalDistancePct` est
+ * l'écart en % au poids objectif (WeighIn.goalDistancePct), null sans objectif.
+ */
+export function isInGoalZone(goalDistancePct: number | null | undefined, rules: Rules = RULES): boolean {
+  return (
+    goalDistancePct !== null &&
+    goalDistancePct !== undefined &&
+    Number.isFinite(goalDistancePct) &&
+    Math.abs(goalDistancePct) <= rules.weighIn.goalTolerancePct + GOAL_EPS
+  )
+}
+
 /**
  * Points de la pesée :
  * - toute première pesée (changePct = null) : 0, elle sert de point de départ ;
@@ -186,12 +204,10 @@ export function weighInPoints(
   rules: Rules = RULES,
 ): number {
   if (!w || w.changePct === null) return 0
-  const { maxPoints, fullPointsLossPct, goalTolerancePct } = rules.weighIn
+  const { maxPoints, fullPointsLossPct } = rules.weighIn
   const loss = -w.changePct
   const fromChange = loss <= 0 ? 0 : Math.min(maxPoints, (loss / fullPointsLossPct) * maxPoints)
-  // Petite tolérance numérique pour les flottants (ex. 0.99999999 %).
-  const inGoalZone = w.goalDistancePct !== null && Math.abs(w.goalDistancePct) <= goalTolerancePct + 1e-9
-  const fromGoal = inGoalZone ? maxPoints : 0
+  const fromGoal = isInGoalZone(w.goalDistancePct, rules) ? maxPoints : 0
   return Math.round(Math.max(fromChange, fromGoal))
 }
 

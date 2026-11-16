@@ -24,8 +24,11 @@ import {
 import { pickCheckinLine } from '../../core/taunts'
 import type { CheckinValue, DayKey, GameSettings, Habit, WeighIn } from '../../core/types'
 import { useDuel } from '../../data/DuelProvider'
+import type { CheckinDay } from '../../ui/nav'
+import { errorText } from '../../ui/format'
 
-export type DayChoice = 'today' | 'yesterday'
+/** Jour affiché par le check-in (même type que celui demandé par la navigation). */
+export type DayChoice = CheckinDay
 
 export interface HabitRow {
   habit: Habit
@@ -80,7 +83,8 @@ export interface CheckinView {
 /** Pourquoi on ne peut pas remplir ce jour-là (null s'il est modifiable). */
 export function lockReasonFor(day: DayKey, today: DayKey, settings: GameSettings): string | null {
   if (canEditCheckin(day, today, settings)) return null
-  if (day < settings.seasonStart) return 'Le duel n’avait pas encore commencé hier 😉'
+  // Comme canEditCheckin et buildSeason : le duel commence le lundi de la semaine de seasonStart.
+  if (day < weekStartOf(settings.seasonStart)) return 'Le duel n’avait pas encore commencé hier 😉'
   if (weekStartOf(day) !== weekStartOf(today)) return 'La manche de la semaine dernière est close 🔒'
   return 'Trop tard pour ce jour-là 🔒'
 }
@@ -90,11 +94,8 @@ interface Pending {
   seq: number
 }
 
-/** Message d'erreur lisible, en français. */
-function errorText(e: unknown): string {
-  if (e instanceof Error && e.message) return e.message
-  return 'Oups, ça n’a pas été enregistré 😕 Réessaie !'
-}
+/** Message si la source rejette sans message lisible. */
+const SAVE_ERROR = 'Oups, ça n’a pas été enregistré 😕 Réessaie\u00a0!'
 
 export function useCheckin(requested: DayChoice, onError: (message: string) => void) {
   const { snapshot, season, today, me, other, source } = useDuel()
@@ -144,6 +145,8 @@ export function useCheckin(requested: DayChoice, onError: (message: string) => v
       day: score,
       answers: rows.map((r) => ({ habitName: r.habit.name, emoji: r.habit.emoji, badgeKey: r.habit.badgeKey, value: r.value })),
       seed: day,
+      // En rattrapage d'hier, des phrases au passé (pas de « revanche demain »).
+      isToday: day === today,
     })
 
     const yesterdayScore = dailyScore(me.id, yesterdayDay, habits, checkins)
@@ -175,7 +178,7 @@ export function useCheckin(requested: DayChoice, onError: (message: string) => v
         past: weighDate < today,
         mine: weighInOfWeek(snapshot.weighIns, me.id, weekStart),
       },
-      notStarted: today < settings.seasonStart,
+      notStarted: today < weekStartOf(settings.seasonStart),
     }
   }, [snapshot, season.data.checkins, checkins, settings, today, day, choice, yesterdayDay, yesterdayLock, me, other])
 
@@ -197,7 +200,7 @@ export function useCheckin(requested: DayChoice, onError: (message: string) => v
         settle()
       } catch (e) {
         settle()
-        onError(errorText(e))
+        onError(errorText(e, SAVE_ERROR))
       }
     },
     [day, source, onError],

@@ -1,17 +1,34 @@
 /**
- * Génère 3 manches fictives + la manche en cours, relativement à « aujourd'hui ».
- * Déterministe (graine fixe) pour que la maquette soit stable d'un chargement à l'autre.
+ * Données de démo : 3 manches fictives + la manche en cours, calées sur la vraie semaine.
+ *
+ * Déterministe : chaque jour est tiré avec sa propre graine (joueur + jour). Un jour inventé
+ * au chargement ou pendant un voyage dans le temps a donc toujours les mêmes réponses, et les
+ * manches passées sont identiques quel que soit le jour simulé ou le joueur connecté.
  *
  * Scénario :
  * - Manche 1 : Laetitia gagne.
  * - Manche 2 : Arthus est mené le jeudi soir puis gagne → 🚀 Remontada.
  * - Manche 3 : Laetitia gagne (gage d'Arthus pas encore payé).
- * - Manche en cours : jours passés remplis, aujourd'hui vide pour les deux.
+ * - Manche en cours (la vraie semaine) : jours passés remplis, aujourd'hui vide pour les deux.
+ *   Ma dernière habitude d'hier reste vide (pour montrer le rattrapage) et, le jour de la
+ *   pesée, l'autre s'est déjà pesé ce matin.
  */
 import { DEFAULT_GAGES, DEFAULT_HABITS, DEFAULT_PLAYERS } from '../../config/defaults'
 import { addDays, daysRange, weekDays, weekStartOf } from '../../core/dates'
-import { indexCheckins, playerWeekScore, weighInDateOfWeek } from '../../core/scoring'
-import type { Checkin, CheckinValue, DayKey, GameSettings, Habit, Player, PlayerId, Proposal, WeekMeta } from '../../core/types'
+import { activeHabits, canEditCheckin, indexCheckins, isWeighInDay, playerWeekScore, weighInDateOfWeek } from '../../core/scoring'
+import { drawStake } from '../../core/stake'
+import type {
+  BadgeUnlock,
+  Checkin,
+  CheckinValue,
+  DayKey,
+  GameSettings,
+  Habit,
+  Player,
+  PlayerId,
+  Proposal,
+  WeekMeta,
+} from '../../core/types'
 import { deriveWeighIns, type RawWeighIn } from '../../core/weight'
 
 export interface DemoPlayer extends Omit<Player, 'goalKg' | 'goalFromStartPct'> {
@@ -24,9 +41,11 @@ export interface GoalRule {
   kg: number | null
 }
 
+export const DEMO_VERSION = 2
+
 /** L'état complet de la démo (qui connaît tout, y compris les kilos des deux). */
 export interface DemoState {
-  version: 1
+  version: typeof DEMO_VERSION
   /** Jour réel où les données ont été générées. */
   anchorReal: DayKey
   /** Jour simulé (« aujourd'hui » dans la démo). */
@@ -41,9 +60,19 @@ export interface DemoState {
   weeks: WeekMeta[]
   settings: GameSettings
   proposals: Proposal[]
+  /** Cérémonies déjà vues, par joueur. */
   seenResults: Record<PlayerId, DayKey[]>
+  /** Célébrations de badges déjà vues, par joueur. */
+  seenBadges: Record<PlayerId, string[]>
+  /** Badges enregistrés comme débloqués (des deux joueurs). */
+  badgeUnlocks: BadgeUnlock[]
   /** Le check-in automatique de l'adversaire a-t-il déjà été simulé aujourd'hui ? */
   otherAutoCheckinDone: boolean
+  /**
+   * Pesée inventée « l'autre s'est déjà pesé ce matin » (jour J). Si « moi » change,
+   * elle passe au nouvel « autre ». null quand il n'y en a pas.
+   */
+  morningWeighIn: { playerId: PlayerId; day: DayKey } | null
 }
 
 /** Petit générateur pseudo-aléatoire déterministe (mulberry32). */
@@ -67,27 +96,84 @@ export function hashSeed(s: string): number {
   return h >>> 0
 }
 
+/**
+ * Lundi de la « manche en cours » du scénario : la vraie semaine, y compris quand on voyage
+ * au lundi suivant (pour y voir la cérémonie de la manche 4). Hors de cette plage, la
+ * semaine du jour demandé.
+ */
+export function scenarioWeek(today: DayKey, anchorReal: DayKey): DayKey {
+  const real = weekStartOf(anchorReal)
+  return today >= real && today <= addDays(real, 7) ? real : weekStartOf(today)
+}
+
+/** Jours où l'on peut voyager : les 7 jours de la vraie semaine + le lundi suivant. */
+export function demoTravelDays(realToday: DayKey): DayKey[] {
+  const monday = weekStartOf(realToday)
+  return [...weekDays(monday), addDays(monday, 7)]
+}
+
 /** Probabilités [nickel, un peu] (le reste = craquage) ou [fait] par joueur et habitude. */
 const PROFILES: Record<string, Record<string, number[]>> = {
   arthus: { ongles: [0.55, 0.3], grignotage: [0.6, 0.25], sport: [0.55] },
   laetitia: { grattage: [0.62, 0.28], grignotage: [0.5, 0.3], sport: [0.65] },
 }
 
-function pick(rng: () => number, habit: Habit, playerKey: string): CheckinValue {
-  const p = PROFILES[playerKey]?.[habit.badgeKey ?? ''] ?? (habit.kind === 'avoid' ? [0.6, 0.25] : [0.6])
+function pick(rng: () => number, habit: Habit, playerId: PlayerId): CheckinValue {
+  const p = PROFILES[playerId]?.[habit.badgeKey ?? ''] ?? (habit.kind === 'avoid' ? [0.6, 0.25] : [0.6])
   const r = rng()
   if (habit.kind === 'do') return r < p[0] ? 'fait' : 'pasfait'
   return r < p[0] ? 'nickel' : r < p[0] + p[1] ? 'unpeu' : 'craquage'
+}
+
+/**
+ * Le check-in inventé d'un joueur pour un jour (toutes ses habitudes actives ce jour-là).
+ * Même joueur + même jour = mêmes réponses. `forget` : un jour oublié de temps en temps (3 %).
+ */
+export function generateDayCheckins(habits: Habit[], playerId: PlayerId, day: DayKey, opts: { forget?: boolean } = {}): Checkin[] {
+  const rng = makeRng(hashSeed(`jour|${playerId}|${day}`))
+  const forgotten = rng() < 0.03
+  if (opts.forget && forgotten) return []
+  return activeHabits(habits, playerId, day).map((h) => ({
+    playerId,
+    habitId: h.id,
+    day,
+    value: pick(rng, h, playerId),
+    updatedAt: `${day}T20:30:00.000Z`,
+  }))
+}
+
+/** La dernière habitude (dans l'ordre d'affichage) d'un joueur ce jour-là. */
+export function lastHabitOf(habits: Habit[], playerId: PlayerId, day: DayKey): Habit | null {
+  return activeHabits(habits, playerId, day).at(-1) ?? null
+}
+
+/** Poids du scénario : pesée de départ, manches 1 à 3, puis la pesée de la manche en cours. */
+const WEIGHTS: Record<string, number[]> = {
+  arthus: [84.6, 84.0, 83.1, 83.4, 82.9],
+  laetitia: [66.2, 65.7, 65.2, 64.8, 64.5],
+}
+
+/**
+ * Poids d'une pesée inventée : la suite du scénario, puis de petites variations
+ * déterministes (entre −0,5 et +0,2 kg) à partir de la pesée précédente.
+ */
+export function demoWeight(playerId: PlayerId, day: DayKey, weighIns: RawWeighIn[]): number {
+  const before = weighIns.filter((w) => w.playerId === playerId && w.day < day).sort((a, b) => (a.day < b.day ? -1 : 1))
+  const scripted = WEIGHTS[playerId]?.[before.length]
+  if (scripted !== undefined) return scripted
+  const last = before.at(-1)?.weightKg ?? WEIGHTS[playerId]?.[0] ?? 70
+  const delta = makeRng(hashSeed(`pesee|${playerId}|${day}`))() * 0.7 - 0.5
+  return Math.round((last + delta) * 10) / 10
 }
 
 const BEST: Record<Habit['kind'], CheckinValue> = { avoid: 'nickel', do: 'fait' }
 const WORST: Record<Habit['kind'], CheckinValue> = { avoid: 'craquage', do: 'pasfait' }
 
 export function generateDemoState(today: DayKey, anchorReal: DayKey, meId: PlayerId = 'arthus'): DemoState {
-  const rng = makeRng(hashSeed(`duel-${weekStartOf(today)}`))
-  const currentWeek = weekStartOf(today)
+  const currentWeek = scenarioWeek(today, anchorReal)
   const seasonStart = addDays(currentWeek, -21)
   const refDay = addDays(seasonStart, -1) // pesée de départ : le dimanche d'avant
+  const yesterday = addDays(today, -1)
 
   const players: DemoPlayer[] = DEFAULT_PLAYERS.map((p) => ({
     key: p.key,
@@ -97,6 +183,7 @@ export function generateDemoState(today: DayKey, anchorReal: DayKey, meId: Playe
     color: p.color,
     showKg: false,
   }))
+  const otherId = players.find((p) => p.id !== meId)?.id ?? 'laetitia'
 
   const habits: Habit[] = []
   for (const p of players) {
@@ -116,17 +203,14 @@ export function generateDemoState(today: DayKey, anchorReal: DayKey, meId: Playe
     })
   }
 
-  // ─── Check-ins des jours passés ───
+  // ─── Check-ins des jours passés (un oubli de temps en temps dans les manches finies) ───
   const checkins = new Map<string, Checkin>()
-  const set = (playerId: PlayerId, habitId: string, day: DayKey, value: CheckinValue) => {
-    checkins.set(`${playerId}|${habitId}|${day}`, { playerId, habitId, day, value, updatedAt: `${day}T20:30:00.000Z` })
-  }
-  const yesterday = addDays(today, -1)
+  const keyOf = (playerId: PlayerId, habitId: string, day: DayKey) => `${playerId}|${habitId}|${day}`
+  const put = (c: Checkin) => checkins.set(keyOf(c.playerId, c.habitId, c.day), c)
+  const set = (playerId: PlayerId, habitId: string, day: DayKey, value: CheckinValue) =>
+    put({ playerId, habitId, day, value, updatedAt: `${day}T20:30:00.000Z` })
   for (const day of daysRange(seasonStart, yesterday)) {
-    for (const p of players) {
-      if (rng() < 0.03) continue // un jour oublié de temps en temps
-      for (const h of habits.filter((x) => x.playerId === p.id)) set(p.id, h.id, day, pick(rng, h, p.key))
-    }
+    for (const p of players) generateDayCheckins(habits, p.id, day, { forget: day < currentWeek }).forEach(put)
   }
 
   // Séries scénarisées (pour débloquer quelques badges).
@@ -138,17 +222,13 @@ export function generateDemoState(today: DayKey, anchorReal: DayKey, meId: Playe
   // 📅 Assidu·e pour les deux : pas de jour oublié en manche 3.
   for (const day of weekDays(weeks[2])) {
     for (const p of players) {
-      for (const h of habits.filter((x) => x.playerId === p.id)) {
-        if (!checkins.has(`${p.id}|${h.id}|${day}`)) set(p.id, h.id, day, pick(rng, h, p.key))
+      for (const c of generateDayCheckins(habits, p.id, day)) {
+        if (!checkins.has(keyOf(c.playerId, c.habitId, c.day))) put(c)
       }
     }
   }
 
   // ─── Pesées (le dimanche) ───
-  const weights: Record<string, number[]> = {
-    arthus: [84.6, 84.0, 83.1, 83.4, 82.9],
-    laetitia: [66.2, 65.7, 65.2, 64.8, 64.5],
-  }
   const settings: GameSettings = {
     seasonStart,
     weighInDays: [{ from: seasonStart, isoDay: 7 }],
@@ -156,13 +236,22 @@ export function generateDemoState(today: DayKey, anchorReal: DayKey, meId: Playe
   }
   const weighIns: RawWeighIn[] = []
   for (const p of players) {
-    weighIns.push({ playerId: p.id, day: refDay, weightKg: weights[p.key][0] })
-    weeks.forEach((ws, i) => weighIns.push({ playerId: p.id, day: weighInDateOfWeek(ws, settings), weightKg: weights[p.key][i + 1] }))
+    weighIns.push({ playerId: p.id, day: refDay, weightKg: demoWeight(p.id, refDay, weighIns) })
+    for (const ws of weeks) {
+      const day = weighInDateOfWeek(ws, settings)
+      weighIns.push({ playerId: p.id, day, weightKg: demoWeight(p.id, day, weighIns) })
+    }
   }
-  // Si aujourd'hui est le jour de la pesée, l'adversaire s'est déjà pesé ce matin.
-  const otherId = players.find((p) => p.id !== meId)?.id ?? 'laetitia'
-  if (weighInDateOfWeek(currentWeek, settings) === today) {
-    weighIns.push({ playerId: otherId, day: today, weightKg: weights[otherId][4] })
+  // Jours de pesée déjà passés depuis le début de la manche en cours (voyage au lundi suivant).
+  for (const day of daysRange(currentWeek, yesterday)) {
+    if (!isWeighInDay(day, settings)) continue
+    for (const p of players) weighIns.push({ playerId: p.id, day, weightKg: demoWeight(p.id, day, weighIns) })
+  }
+  // Si aujourd'hui est le jour de la pesée, l'autre s'est déjà pesé ce matin.
+  let morningWeighIn: DemoState['morningWeighIn'] = null
+  if (today >= currentWeek && isWeighInDay(today, settings)) {
+    weighIns.push({ playerId: otherId, day: today, weightKg: demoWeight(otherId, today, weighIns) })
+    morningWeighIn = { playerId: otherId, day: today }
   }
   const goals: GoalRule[] = [
     { playerId: 'arthus', from: refDay, kg: 79 },
@@ -195,28 +284,32 @@ export function generateDemoState(today: DayKey, anchorReal: DayKey, meId: Playe
   force('arthus', 'laetitia', w2, weekDays(w2).slice(4), 15)
   force('laetitia', 'arthus', w3, weekDays(w3).reverse(), 30)
 
-  // ─── Manches : enjeux et gages ───
+  // Ma dernière habitude d'hier reste vide : de quoi montrer « Hier n'est pas complet ».
+  const lastYesterday = lastHabitOf(habits, meId, yesterday)
+  if (lastYesterday && canEditCheckin(yesterday, today, settings)) checkins.delete(keyOf(meId, lastYesterday.id, yesterday))
+
+  // ─── Manches : enjeux et gages (la manche en cours : tirage automatique du lundi) ───
   const weekMetas: WeekMeta[] = [
     { weekStart: w1, stake: DEFAULT_GAGES[0], gagePaid: { arthus: true } },
     { weekStart: w2, stake: DEFAULT_GAGES[1], gagePaid: { laetitia: true } },
     { weekStart: w3, stake: DEFAULT_GAGES[3], gagePaid: {} },
-    { weekStart: currentWeek, stake: DEFAULT_GAGES[2], gagePaid: {} },
+    { weekStart: currentWeek, stake: drawStake(settings.gages, currentWeek, DEFAULT_GAGES[3]), gagePaid: {} },
   ]
 
   const proposals: Proposal[] = [
     {
       id: 'demo-proposal-eau',
       authorId: 'laetitia',
-      payload: { kind: 'habit_add', name: 'Eau', emoji: '💧', hint: '1,5 L dans la journée', habitKind: 'do' },
+      payload: { kind: 'habit_add', name: 'Eau', emoji: '💧', hint: '1,5\u00a0L dans la journée', habitKind: 'do' },
       status: 'pending',
-      createdAt: `${addDays(today, -1)}T19:12:00.000Z`,
+      createdAt: `${yesterday}T19:12:00.000Z`,
       decidedAt: null,
       effectiveFrom: null,
     },
   ]
 
   return {
-    version: 1,
+    version: DEMO_VERSION,
     anchorReal,
     today,
     meId,
@@ -230,6 +323,9 @@ export function generateDemoState(today: DayKey, anchorReal: DayKey, meId: Playe
     settings,
     proposals,
     seenResults: { arthus: [w1, w2], laetitia: [w1, w2] },
+    seenBadges: { arthus: [], laetitia: [] },
+    badgeUnlocks: [],
     otherAutoCheckinDone: false,
+    morningWeighIn,
   }
 }

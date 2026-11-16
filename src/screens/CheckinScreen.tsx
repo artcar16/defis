@@ -6,9 +6,11 @@
  */
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { NBSP, frDate, frDayMonth, plural } from '../core/fr'
 import { pointsFor } from '../core/scoring'
 import type { CheckinValue } from '../core/types'
 import { useDuel } from '../data/DuelProvider'
+import { themeColor } from '../ui/color'
 import { celebrate } from '../ui/confetti'
 import { Avatar, Button, ScreenHeader, springy } from '../ui/kit'
 import { useNav } from '../ui/nav'
@@ -16,7 +18,6 @@ import { useToast } from '../ui/toast'
 import { DayToggle } from './checkin/DayToggle'
 import { DoneCard, type DoneAction } from './checkin/DoneCard'
 import { UpcomingHabits, WeighInRow } from './checkin/Extras'
-import { dayMonth, longDate, plural, themeColor } from './checkin/format'
 import { HabitCard } from './checkin/HabitCard'
 import { ScoreGauge } from './checkin/ScoreGauge'
 import { useCheckin, type CheckinView, type DayChoice } from './checkin/useCheckin'
@@ -24,7 +25,6 @@ import { useCheckin, type CheckinView, type DayChoice } from './checkin/useCheck
 /** Zone visible au-dessus de la barre d'onglets / sous le mini-score flottant (px). */
 const VISIBLE_TOP = 84
 const VISIBLE_BOTTOM = 124
-
 
 /** Fait défiler doucement pour que l'élément soit entièrement visible (s'il ne l'est pas déjà). */
 function reveal(el: HTMLElement | null | undefined, smooth: boolean) {
@@ -39,11 +39,12 @@ function reveal(el: HTMLElement | null | undefined, smooth: boolean) {
 
 export function CheckinScreen() {
   const { me, other } = useDuel()
-  const { setTab, openSheet } = useNav()
+  const { setTab, openSheet, takeCheckinDay } = useNav()
   const toast = useToast()
   const reduced = useReducedMotion() ?? false
 
-  const [requested, setRequested] = useState<DayChoice>('today')
+  // Jour demandé par le lien qui a ouvert l'onglet (« Hier n'est pas complet » du Ring), lu une fois.
+  const [requested, setRequested] = useState<DayChoice>(() => takeCheckinDay() ?? 'today')
   const onError = useCallback((text: string) => toast({ text, color: 'var(--color-craquage)' }), [toast])
   const { view, answer } = useCheckin(requested, onError)
 
@@ -99,7 +100,7 @@ export function CheckinScreen() {
         title="Check-in"
         subtitle={
           <>
-            {longDate(view.day)}
+            {frDate(view.day, { capitalized: true })}
             {!isToday && <span className="text-ink-soft"> · rattrapage ⏪</span>}
           </>
         }
@@ -181,19 +182,20 @@ function doneActions(
   view: CheckinView,
   go: { ring: () => void; weighIn: () => void; today: () => void; yesterday: () => void },
 ): { primary: DoneAction; secondary?: DoneAction } {
-  const ring: DoneAction = { label: 'Retour au Ring 🥊', onClick: go.ring }
+  // Espace insécable avant l'emoji final : il ne se retrouve jamais seul sur une ligne.
+  const ring: DoneAction = { label: `Retour au Ring${NBSP}🥊`, onClick: go.ring }
   if (view.choice === 'yesterday') {
     return view.todayScore.complete
       ? { primary: ring }
-      : { primary: { label: 'Passer à aujourd’hui ☀️', onClick: go.today }, secondary: ring }
+      : { primary: { label: `Passer à aujourd’hui${NBSP}☀️`, onClick: go.today }, secondary: ring }
   }
   if (view.weighIn.isToday && !view.weighIn.mine) {
-    return { primary: { label: 'Et maintenant, la pesée ⚖️', onClick: go.weighIn }, secondary: ring }
+    return { primary: { label: `Et maintenant, la pesée${NBSP}⚖️`, onClick: go.weighIn }, secondary: ring }
   }
   if (view.yesterday.missing > 0) {
     return {
       primary: ring,
-      secondary: { label: `Rattraper hier ⏪ (${plural(view.yesterday.missing, 'oubli')})`, onClick: go.yesterday },
+      secondary: { label: `Rattraper hier${NBSP}⏪ (${plural(view.yesterday.missing, 'oubli')})`, onClick: go.yesterday },
     }
   }
   return { primary: ring }
@@ -218,9 +220,9 @@ function NotStarted({ view }: { view: CheckinView }) {
       >
         ⏳
       </motion.div>
-      <h2 className="mt-3 font-display text-[26px] leading-tight font-bold text-ink">Pas encore commencé !</h2>
-      <p className="mt-1 text-[16px] font-semibold text-ink-soft">
-        {habits.length > 0 ? `Premier check-in le lundi ${dayMonth(habits[0].activeFrom)}.` : 'Premier check-in lundi.'} Échauffe-toi 🥊
+      <h2 className="mt-3 font-display text-[26px] leading-tight font-bold text-ink">Pas encore commencé{NBSP}!</h2>
+      <p className="mt-1 text-[16px] font-semibold text-pretty text-ink-soft">
+        {habits.length > 0 ? `Premier check-in le lundi ${frDayMonth(habits[0].activeFrom, 'MMMM')}.` : 'Premier check-in lundi.'} Échauffe-toi 🥊
       </p>
       {habits.length > 0 && (
         <ul className="mt-4 flex flex-wrap justify-center gap-2">

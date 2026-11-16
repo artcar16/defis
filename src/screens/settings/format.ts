@@ -1,10 +1,12 @@
 /**
- * Formatages et textes des réglages (propositions, dates, kilos).
- * Aucune dépendance à React : facile à réutiliser une fois branché sur Supabase.
+ * Textes propres aux réglages (propositions, dates d'effet, saisie des kilos).
+ * Aucune dépendance à React. Les outils communs sont ailleurs :
+ * français dans core/fr.ts, couleurs dans ui/color.ts, erreurs dans ui/format.ts.
  */
 import { RULES } from '../../config/rules'
-import { formatDay, isoDayName } from '../../core/dates'
-import type { DayKey, Habit, HabitKind, Player, PlayerId, Proposal } from '../../core/types'
+import { isoDayName } from '../../core/dates'
+import { NBSP, capitalize, frDate, typo } from '../../core/fr'
+import type { DayKey, Habit, HabitKind, PlayerId, Proposal } from '../../core/types'
 import { formatKg, formatPct } from '../../core/weight'
 
 export const KIND_LABEL: Record<HabitKind, string> = { avoid: 'à éviter', do: 'à faire' }
@@ -14,28 +16,16 @@ export const KIND_SCALE: Record<HabitKind, string> = {
   do: '💪 Fait · 🛋️ Pas fait',
 }
 
-/** « lundi 23 nov. » */
-export function shortDate(day: DayKey): string {
-  return formatDay(day, 'EEEE d MMM')
-}
-
-/** « dès lundi 23 nov. » */
+/** « dès lundi 23 nov. », « dès lundi 1er févr. » (jamais de coupure entre le numéro et le mois). */
 export function fromLabel(day: DayKey): string {
-  return `dès ${shortDate(day)}`
-}
-
-/** Teinte douce d'une couleur (fonctionne en clair comme en sombre). */
-export function tint(color: string, pct: number, base = 'var(--color-surface)'): string {
-  return `color-mix(in oklab, ${color} ${pct}%, ${base})`
-}
-
-/** Texte lisible dans une couleur (mélangée à l'encre du thème). */
-export function inkOf(color: string, pct = 70): string {
-  return `color-mix(in oklab, ${color} ${pct}%, var(--color-ink))`
+  return `dès ${frDate(day, { month: 'MMM' }).replace(/(\d+(?:er)?) /, `$1${NBSP}`)}`
 }
 
 /** Encre foncée fixe pour le texte posé sur l'or (l'or ne change pas en mode sombre). */
 export const ON_GOLD = 'color-mix(in oklab, var(--color-gold) 22%, black)'
+
+/** « Saisis un poids entre 30 et 250 kg 🙃 » (bornes lues dans RULES). */
+export const KG_RANGE_ERROR = `Saisis un poids entre ${RULES.weighIn.minKg} et ${RULES.weighIn.maxKg}${NBSP}kg 🙃`
 
 /** Lit « 78,5 » / « 78.5 » → 78.5 (arrondi au pas de la pesée), ou null si invalide. */
 export function parseKg(input: string): number | null {
@@ -52,12 +42,6 @@ export function kgInput(kg: number): string {
   return kg.toFixed(1).replace('.', ',')
 }
 
-/** Message d'erreur lisible (les sources lèvent des Error en français). */
-export function errorText(e: unknown): string {
-  if (e instanceof Error && e.message) return e.message
-  return 'Oups, ça n’a pas marché 😵 Réessaie ?'
-}
-
 // ─── Propositions ────────────────────────────────────────────────────────────
 
 export interface ProposalText {
@@ -69,16 +53,21 @@ export interface ProposalText {
 export interface DescribeContext {
   meId: PlayerId
   habits: Habit[]
-  playerById: (id: PlayerId) => Player
   /** Jour de la pesée en vigueur (1 = lundi … 7 = dimanche). */
   currentWeighDay: number
 }
 
 /**
  * Description en français d'une proposition, du point de vue du joueur connecté.
- * Le poids objectif de l'autre est toujours donné en % (jamais ses kilos).
+ * Le poids objectif de l'autre n'est jamais donné en kg, seulement en % (décision 18) :
+ * dans mon snapshot, son goalKg est d'ailleurs à null.
  */
 export function describeProposal(p: Proposal, ctx: DescribeContext): ProposalText {
+  const t = describeRaw(p, ctx)
+  return { emoji: t.emoji, title: typo(t.title), detail: t.detail === undefined ? undefined : typo(t.detail) }
+}
+
+function describeRaw(p: Proposal, ctx: DescribeContext): ProposalText {
   const mine = p.authorId === ctx.meId
   const pl = p.payload
   switch (pl.kind) {
@@ -114,35 +103,23 @@ export function describeProposal(p: Proposal, ctx: DescribeContext): ProposalTex
             : `Au lieu du ${isoDayName(ctx.currentWeighDay)}, pour nous deux`,
       }
     case 'goal_weight': {
-      if (pl.goalKg === null && pl.goalFromStartPct === null) {
+      // Le drapeau `clear` dit s'il s'agit d'un retrait : goalKg vaut null aussi quand il est masqué.
+      if (pl.clear) {
         return { emoji: '🎯', title: mine ? 'Retirer mon objectif de poids' : 'Retirer son objectif de poids' }
       }
+      const pct = pl.goalFromStartPct
       if (mine) {
         return {
           emoji: '🎯',
-          title: `Mon objectif : ${formatKg(pl.goalKg)}`,
-          detail: pl.goalFromStartPct !== null ? `${formatPct(pl.goalFromStartPct)} depuis mon départ` : undefined,
+          title: pl.goalKg !== null ? `Mon objectif : ${formatKg(pl.goalKg)}` : 'Mon nouvel objectif de poids',
+          detail: pct !== null ? `${formatPct(pct)} depuis mon départ` : undefined,
         }
       }
       return {
         emoji: '🎯',
-        title: pl.goalFromStartPct !== null ? `Nouvel objectif : ${formatPct(pl.goalFromStartPct)}` : 'Nouvel objectif de poids',
-        detail: pl.goalFromStartPct !== null ? 'depuis sa première pesée' : undefined,
+        title: pct !== null ? `Nouvel objectif : ${formatPct(pct)}` : 'Nouvel objectif de poids',
+        detail: pct !== null ? 'depuis sa première pesée' : undefined,
       }
     }
   }
-}
-
-/** « de Laetitia », « d’Arthus » (élision devant une voyelle). */
-export function deName(name: string): string {
-  return /^[aeiouyàâäéèêëîïôöùûü]/i.test(name) ? `d’${name}` : `de ${name}`
-}
-
-export function capitalize(s: string): string {
-  return s.charAt(0).toUpperCase() + s.slice(1)
-}
-
-/** Propositions en attente du joueur connecté, par type. */
-export function myPending(proposals: Proposal[], meId: PlayerId): Proposal[] {
-  return proposals.filter((p) => p.status === 'pending' && p.authorId === meId)
 }

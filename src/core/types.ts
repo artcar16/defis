@@ -101,15 +101,17 @@ export interface GameSettings {
   gages: string[]
 }
 
-export type ProposalKind = 'habit_add' | 'habit_disable' | 'habit_kind' | 'weigh_day' | 'goal_weight'
-
 export type ProposalPayload =
   | { kind: 'habit_add'; name: string; emoji: string; hint: string; habitKind: HabitKind }
   | { kind: 'habit_disable'; habitId: string }
   | { kind: 'habit_kind'; habitId: string; habitKind: HabitKind }
   | { kind: 'weigh_day'; isoDay: number }
-  /** Le poids objectif est transmis en % depuis le départ pour ne pas révéler les kilos. */
-  | { kind: 'goal_weight'; goalKg: number | null; goalFromStartPct: number | null }
+  /**
+   * Nouvel objectif de poids (ou retrait si `clear`). L'autre ne voit que le % depuis le
+   * départ : dans SON snapshot, `goalKg` vaut null (sauf si l'auteur montre ses kilos).
+   * Avec Supabase, les kg restent dans une table lisible par l'auteur seul.
+   */
+  | { kind: 'goal_weight'; clear: boolean; goalKg: number | null; goalFromStartPct: number | null }
 
 export type ProposalStatus = 'pending' | 'accepted' | 'refused' | 'cancelled'
 
@@ -136,4 +138,22 @@ export interface DuelSnapshot {
   proposals: Proposal[]
   /** Manches dont le joueur connecté a déjà vu la cérémonie (lundis). */
   seenResults: DayKey[]
+  /**
+   * Badges enregistrés comme débloqués (des deux joueurs). Un badge débloqué le reste,
+   * même si une correction autorisée (aujourd'hui, hier, pesée du jour) repasse sous le seuil.
+   */
+  badgeUnlocks: BadgeUnlock[]
+  /** Célébrations de badges déjà vues par le joueur connecté (clés de useUnseenUnlocks). */
+  seenBadges: string[]
+}
+
+/** Un badge (ou un palier) obtenu, enregistré pour ne plus jamais le perdre. */
+export interface BadgeUnlock {
+  playerId: PlayerId
+  /** Identifiant du badge (BadgeId de core/badges.ts). */
+  badgeId: string
+  /** Palier (🪶 Plume : % de perte, ex. 2 pour −2 %) ; null pour les autres badges. */
+  tier: number | null
+  /** Jour de la première obtention. */
+  day: DayKey
 }

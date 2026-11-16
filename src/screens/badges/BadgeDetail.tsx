@@ -6,19 +6,20 @@
 import { AnimatePresence, motion, useDragControls, useReducedMotion } from 'motion/react'
 import { useId } from 'react'
 import type { BadgeState } from '../../core/badges'
+import { deName, plural, typo } from '../../core/fr'
 import type { DayKey, Player } from '../../core/types'
+import { tint } from '../../ui/color'
 import { Button, Pill } from '../../ui/kit'
 import {
+  dayMonth,
   HOW_TO,
   isBinary,
   isTiered,
   notApplicableText,
-  plural,
   progressCaption,
   progressRatio,
   progressText,
   remainingText,
-  shortDate,
   unlockedLabel,
 } from './copy'
 import { Medal } from './Medal'
@@ -31,8 +32,6 @@ export interface DetailProps {
   /** Le joueur connecté regarde son propre badge. */
   isMe: boolean
   today: DayKey
-  /** Jours restants dans la manche en cours (aujourd'hui compris). */
-  daysLeftInWeek: number
 }
 
 export function BadgeDetail({ detail, onClose }: { detail: DetailProps | null; onClose: () => void }) {
@@ -43,7 +42,7 @@ export function BadgeDetail({ detail, onClose }: { detail: DetailProps | null; o
   )
 }
 
-function DetailSheet({ badge, player, isMe, today, daysLeftInWeek, onClose }: DetailProps & { onClose: () => void }) {
+function DetailSheet({ badge, player, isMe, today, onClose }: DetailProps & { onClose: () => void }) {
   useModalBehavior(true, onClose)
   const reduced = useReducedMotion() ?? false
   const drag = useDragControls()
@@ -93,7 +92,7 @@ function DetailSheet({ badge, player, isMe, today, daysLeftInWeek, onClose }: De
             onPointerDown={(e) => drag.start(e)}
             style={
               state === 'unlocked'
-                ? { background: 'linear-gradient(180deg, color-mix(in oklab, var(--color-gold) 22%, var(--color-surface)), var(--color-surface))' }
+                ? { background: `linear-gradient(180deg, ${tint('var(--color-gold)', 22)}, var(--color-surface))` }
                 : undefined
             }
           >
@@ -117,19 +116,19 @@ function DetailSheet({ badge, player, isMe, today, daysLeftInWeek, onClose }: De
                 {badge.name}
               </h2>
               <Pill color={player.color}>
-                <span aria-hidden="true">{player.emoji}</span> {isMe ? 'Ma vitrine' : `La vitrine de ${player.name}`}
+                <span aria-hidden="true">{player.emoji}</span> {isMe ? 'Ma vitrine' : `La vitrine ${deName(player.name)}`}
               </Pill>
             </div>
           </div>
 
           <div className="px-5 pt-2">
-          <StatusBox badge={badge} state={state} player={player} who={who} today={today} daysLeftInWeek={daysLeftInWeek} />
+          <StatusBox badge={badge} state={state} player={player} who={who} today={today} />
 
           {isTiered(badge) && badge.applicable && <TierList badge={badge} today={today} />}
 
           <section className="mt-5">
-            <h3 className="font-display text-lg font-semibold text-ink-soft">Comment l’obtenir ? 🧐</h3>
-            <p className="mt-1.5 text-[16px] leading-snug font-bold text-ink">{badge.description}</p>
+            <h3 className="font-display text-lg font-semibold text-ink-soft">Comment l’obtenir ? 🧐</h3>
+            <p className="mt-1.5 text-[16px] leading-snug font-bold text-ink">{typo(badge.description)}</p>
             <p className="mt-1.5 text-[15px] leading-snug text-ink-soft">{HOW_TO[badge.id]}</p>
           </section>
 
@@ -151,14 +150,12 @@ function StatusBox({
   player,
   who,
   today,
-  daysLeftInWeek,
 }: {
   badge: BadgeState
   state: 'unlocked' | 'locked' | 'na'
   player: Player
   who: string | null
   today: DayKey
-  daysLeftInWeek: number
 }) {
   if (state === 'na') {
     return (
@@ -191,25 +188,15 @@ function StatusBox({
             </div>
           )}
         </div>
-        {moreTiers && <ProgressBlock badge={badge} player={player} who={who} daysLeftInWeek={daysLeftInWeek} />}
+        {moreTiers && <ProgressBlock badge={badge} player={player} who={who} />}
       </>
     )
   }
 
-  return <ProgressBlock badge={badge} player={player} who={who} daysLeftInWeek={daysLeftInWeek} />
+  return <ProgressBlock badge={badge} player={player} who={who} />
 }
 
-function ProgressBlock({
-  badge,
-  player,
-  who,
-  daysLeftInWeek,
-}: {
-  badge: BadgeState
-  player: Player
-  who: string | null
-  daysLeftInWeek: number
-}) {
+function ProgressBlock({ badge, player, who }: { badge: BadgeState; player: Player; who: string | null }) {
   const reduced = useReducedMotion() ?? false
   const text = progressText(badge)
   const pct = Math.round(progressRatio(badge) * 100)
@@ -241,7 +228,7 @@ function ProgressBlock({
           />
         </div>
       )}
-      <p className="mt-2.5 text-[15px] leading-snug font-semibold text-ink-soft">{remainingText(badge, who, daysLeftInWeek)}</p>
+      <p className="mt-2.5 text-[15px] leading-snug font-semibold text-ink-soft">{remainingText(badge, who)}</p>
     </div>
   )
 }
@@ -279,7 +266,7 @@ function TierList({ badge, today }: { badge: BadgeState; today: DayKey }) {
                   Palier {i + 1} · <span className="score-num">{t.label}</span>
                 </span>
                 <span className="block text-[14px] font-bold text-muted">
-                  {t.unlockedOn ? (t.unlockedOn === today ? 'Atteint aujourd’hui 🎉' : `Atteint le ${shortDate(t.unlockedOn)}`) : 'Pas encore'}
+                  {t.unlockedOn ? (t.unlockedOn === today ? 'Atteint aujourd’hui 🎉' : `Atteint le ${dayMonth(t.unlockedOn)}`) : 'Pas encore'}
                 </span>
               </span>
               <span className="text-xl" aria-hidden="true">

@@ -1,11 +1,12 @@
 /**
- * 🥁 La cérémonie : « Et le gagnant est… » → les scores montent → la couronne 👑
- * tombe sur le gagnant (rayons dorés, confettis) → 😭 pour le perdant.
+ * 🥁 La cérémonie : « Et la victoire revient à… » → les scores montent → la couronne 👑
+ * tombe sur qui gagne (rayons dorés, confettis) → 😭 pour qui perd.
  */
 import { AnimatePresence, motion } from 'motion/react'
-import type { Player } from '../../core/types'
+import { formatPts, ptsUnit, typo, weekRangeLabel } from '../../core/fr'
+import type { DayKey, Player } from '../../core/types'
+import { deep, tint } from '../../ui/color'
 import { Avatar, Button, springy } from '../../ui/kit'
-import { deep, tint, weekRange } from '../weighin/format'
 import { useCountUp } from './useCountUp'
 import type { WeekResults } from './useWeekResults'
 
@@ -14,6 +15,11 @@ const ORDER: Stage[] = ['drumroll', 'count', 'crown', 'done']
 export const atLeast = (stage: Stage, min: Stage) => ORDER.indexOf(stage) >= ORDER.indexOf(min)
 
 type Role = 'winner' | 'loser' | 'tie'
+
+/** « du 9 au 15 novembre » ; à cheval sur deux mois, en abrégé pour tenir sur une ligne (« du 26 oct. au 1er nov. »). */
+function rangeLabel(start: DayKey, end: DayKey): string {
+  return weekRangeLabel(start, end, start.slice(0, 7) === end.slice(0, 7) ? 'MMMM' : 'MMM')
+}
 
 export function Ceremony({
   results,
@@ -40,7 +46,7 @@ export function Ceremony({
   return (
     <section className="relative overflow-x-clip pt-1 text-center" aria-label="Cérémonie des résultats">
       <p className="inline-flex items-center gap-1.5 rounded-full bg-surface/80 px-3 py-1 text-[13px] font-bold text-ink-soft shadow-[var(--shadow-card)]">
-        🏁 Manche {week.index} · {weekRange(week.weekStart, week.weekEnd)}
+        🏁 Manche {week.index} · {rangeLabel(week.weekStart, week.weekEnd)}
       </p>
 
       {/* Titre : suspense, puis le verdict. */}
@@ -64,7 +70,7 @@ export function Ceremony({
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.8 }}
             >
-              Et le gagnant est
+              Et la victoire revient à
               <Dots reduced={reduced} />
             </motion.h2>
           )}
@@ -119,7 +125,7 @@ export function Ceremony({
                 <span className="text-[30px] leading-none" aria-hidden="true">
                   {tie ? '🤝' : '😭'}
                 </span>
-                <span>{tie ? 'Égalité parfaite : gage pour les deux\u202f!' : results.loserLine}</span>
+                <span>{tie ? typo('Égalité parfaite : gage pour les deux !') : results.loserLine}</span>
               </p>
             </motion.div>
           )}
@@ -235,7 +241,7 @@ function PodiumColumn({
         <span className="score-num text-[42px] leading-none" style={{ color: deep(player.color, 80) }}>
           {shown === null ? <QuestionMark reduced={reduced} /> : shown}
         </span>
-        <span className="font-display text-[14px] font-semibold text-muted">pts</span>
+        <span className="font-display text-[14px] font-semibold text-muted">{ptsUnit(shown ?? total)}</span>
         <AnimatePresence>
           {revealed && role !== 'tie' && (
             <motion.span
@@ -321,11 +327,11 @@ function Center({ stage, tie, gap, reduced }: { stage: Stage; tie: boolean; gap:
             initial={reduced ? false : { scale: 0, rotate: 90 }}
             animate={{ scale: 1, rotate: 0 }}
             transition={{ ...springy, delay: reduced ? 0 : 0.6 }}
-            aria-label={`Écart : ${gap} points`}
+            aria-label={typo(`Écart : ${formatPts(gap)}`)}
           >
-            <span className="flex flex-col items-center leading-none">
+            <span className="flex flex-col items-center leading-none" aria-hidden="true">
               <span className="text-[17px] font-bold">+{gap}</span>
-              <span className="text-[11px] font-bold">pts</span>
+              <span className="text-[11px] font-bold">{ptsUnit(gap)}</span>
             </span>
           </motion.div>
         )}

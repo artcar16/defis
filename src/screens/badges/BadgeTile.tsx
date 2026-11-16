@@ -4,7 +4,9 @@
  */
 import { motion, useReducedMotion, type Variants } from 'motion/react'
 import type { BadgeState } from '../../core/badges'
+import { NBSP } from '../../core/fr'
 import type { DayKey, Player } from '../../core/types'
+import { tint } from '../../ui/color'
 import { springy } from '../../ui/kit'
 import { isBinary, isTiered, progressRatio, progressText, unlockedLabel } from './copy'
 import { Medal } from './Medal'
@@ -45,7 +47,7 @@ export function BadgeTile({
       style={
         state === 'unlocked'
           ? {
-              background: `linear-gradient(180deg, color-mix(in oklab, var(--color-gold) 20%, var(--color-surface)), var(--color-surface) 62%)`,
+              background: `linear-gradient(180deg, ${tint('var(--color-gold)', 20)}, var(--color-surface) 62%)`,
               boxShadow: `var(--shadow-card), inset 0 0 0 2px color-mix(in oklab, var(--color-gold) 45%, transparent)`,
             }
           : state === 'na'
@@ -69,7 +71,7 @@ export function BadgeTile({
       >
         {badge.name}
         <span className="sr-only">
-          {state === 'unlocked' ? ` : débloqué${badge.count > 1 && !tiered ? `, obtenu ${badge.count} fois` : ''}` : state === 'locked' ? ' : verrouillé' : ''}
+          {state === 'unlocked' ? `${NBSP}: débloqué${badge.count > 1 && !tiered ? `, obtenu ${badge.count} fois` : ''}` : state === 'locked' ? `${NBSP}: verrouillé` : ''}
         </span>
       </span>
 

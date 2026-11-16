@@ -5,12 +5,13 @@
 import { motion, useReducedMotion } from 'motion/react'
 import { useState } from 'react'
 import { RULES } from '../../config/rules'
+import { formatPts, formatSignedPts, NBSP } from '../../core/fr'
 import { weighInPoints } from '../../core/scoring'
-import { formatPts } from '../../core/taunts'
 import type { DayKey, Player, WeighIn } from '../../core/types'
 import { formatKg, formatPct } from '../../core/weight'
+import { deep, tint } from '../../ui/color'
 import { Avatar, Card, Pill, ProgressBar, SectionTitle } from '../../ui/kit'
-import { capitalize, deep, shortDay, tint } from './format'
+import { frNum, shortDay } from './format'
 
 // ─── Mon objectif ────────────────────────────────────────────────────────────
 
@@ -41,9 +42,14 @@ export function GoalCard({ me, fromStartPct, hasStart }: { me: Player; fromStart
       {progress !== null && hasStart ? (
         <>
           <ProgressBar value={progress * 100} max={100} color={me.color} className="mt-3 h-4!" />
-          <div className="mt-2 flex items-center justify-between gap-2 text-[15px] font-bold">
-            <span className="text-ink-soft">Depuis le départ : {formatPct(fromStartPct)}</span>
-            <span style={{ color: deep(me.color) }}>{Math.round(progress * 100)} % du chemin</span>
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 text-[15px] font-bold">
+            <span className="whitespace-nowrap text-ink-soft">
+              Depuis le départ{NBSP}: {formatPct(fromStartPct)}
+            </span>
+            <span className="whitespace-nowrap" style={{ color: deep(me.color, 82) }}>
+              {Math.round(progress * 100)}
+              {NBSP}% du chemin
+            </span>
           </div>
         </>
       ) : (
@@ -54,7 +60,7 @@ export function GoalCard({ me, fromStartPct, hasStart }: { me: Player; fromStart
         </p>
       )}
       <p className="mt-2 text-[13px] font-semibold text-muted">
-        Une fois dans la zone (±{String(RULES.weighIn.goalTolerancePct).replace('.', ',')} %), chaque pesée rapporte {formatPts(RULES.weighIn.maxPoints)} 🎯
+        {`Une fois dans la zone (±${frNum(RULES.weighIn.goalTolerancePct)}${NBSP}%), chaque pesée rapporte ${formatPts(RULES.weighIn.maxPoints)} 🎯`}
       </p>
     </Card>
   )
@@ -73,14 +79,14 @@ export function OpponentCard({ other, latest, today, open }: { other: Player; la
           <p className="truncate font-display text-lg leading-tight font-semibold" style={{ color: deep(other.color, 75) }}>
             {other.name}
           </p>
-          <p className="text-[15px] font-semibold text-muted">
-            {latest ? (isToday ? 'Pesée du jour' : `Dernière pesée : ${shortDay(latest.day)}`) : 'Pas encore de pesée'}
-          </p>
+          {/* Le statut sous le prénom ; la date complète, plus longue, passe sous l'en-tête. */}
+          <p className="text-[15px] font-semibold text-muted">{latest ? (isToday ? 'Pesée du jour' : 'Dernière pesée') : 'Pas encore de pesée'}</p>
         </div>
         {latest && (
-          <div className="text-right">
-            <p className="score-num text-[26px] leading-none" style={{ color: deep(other.color, 80) }}>
-              {latest.changePct === null ? '📍' : formatPct(latest.changePct)}
+          <div className="shrink-0 text-right">
+            {/* 2 décimales à côté des points (−0,46 % = 46 pts) : ce qu'on voit = ce qui compte. */}
+            <p className="score-num text-[clamp(20px,6.5vw,26px)] leading-none whitespace-nowrap" style={{ color: deep(other.color, 80) }}>
+              {latest.changePct === null ? '📍' : formatPct(latest.changePct, 2)}
             </p>
             <p className="mt-1 text-[13px] font-bold text-muted">{latest.changePct === null ? 'départ' : formatPts(points)}</p>
           </div>
@@ -88,12 +94,17 @@ export function OpponentCard({ other, latest, today, open }: { other: Player; la
       </div>
       {latest && (
         <div className="mt-3 flex flex-wrap gap-2">
-          <Pill color={other.color}>Depuis le départ : {formatPct(latest.fromStartPct)}</Pill>
+          {!isToday && <Pill>📅 {shortDay(latest.day, true)}</Pill>}
+          <Pill color={other.color}>
+            Depuis le départ{NBSP}: {formatPct(latest.fromStartPct)}
+          </Pill>
           {latest.weightKg !== null && <Pill color={other.color}>{formatKg(latest.weightKg)}</Pill>}
           {open && (isToday ? <Pill color="var(--color-nickel)">✅ Déjà passé·e sur la balance</Pill> : <Pill>👀 Pas encore pesé·e</Pill>)}
         </div>
       )}
-      {latest?.weightKg === null && <p className="mt-2 text-[13px] font-semibold text-muted">🔒 Tu ne vois que ses variations en %, pas ses kilos.</p>}
+      {latest?.weightKg === null && (
+        <p className="mt-2 text-[13px] font-semibold text-muted">🔒 Tu ne vois que ses variations en{NBSP}%, pas ses kilos.</p>
+      )}
     </Card>
   )
 }
@@ -125,19 +136,29 @@ export function WeighInHistory({ me, mine }: { me: Player; mine: WeighIn[] }) {
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: Math.min(i, 8) * 0.04 }}
               >
-                <span className="w-[92px] shrink-0 font-display text-[15px] font-semibold text-ink-soft">{capitalize(shortDay(w.day))}</span>
-                <span className="score-num text-[16px] text-ink">{w.weightKg !== null ? formatKg(w.weightKg) : ''}</span>
-                <span className="ml-auto text-[15px] font-bold text-ink-soft">{first ? '📍 Départ' : formatPct(w.changePct)}</span>
-                <span
-                  className="w-[66px] shrink-0 rounded-full py-1 text-center text-[13px] font-bold"
-                  style={
-                    pts > 0
-                      ? { background: tint('var(--color-nickel)', 22), color: 'color-mix(in oklab, var(--color-nickel) 65%, var(--color-ink))' }
-                      : { background: 'var(--color-sunken)', color: 'var(--color-muted)' }
-                  }
-                >
-                  {first ? '—' : `${pts > 0 ? '+' : ''}${formatPts(pts)}`}
+                <span className="min-w-0 flex-1 leading-tight">
+                  <span className="block font-display text-[15px] font-semibold whitespace-nowrap text-ink-soft">{shortDay(w.day, true)}</span>
+                  {w.weightKg !== null && <span className="score-num block text-[15px] text-ink">{formatKg(w.weightKg)}</span>}
                 </span>
+                {first ? (
+                  // La toute première pesée : le point de départ, sans variation ni points.
+                  <span className="shrink-0 text-[15px] font-bold whitespace-nowrap text-ink-soft">📍 Point de départ</span>
+                ) : (
+                  <>
+                    {/* 2 décimales à côté des points (−0,46 % = 46 pts). */}
+                    <span className="shrink-0 text-right text-[15px] font-bold whitespace-nowrap text-ink-soft">{formatPct(w.changePct, 2)}</span>
+                    <span
+                      className="w-[70px] shrink-0 rounded-full py-1 text-center text-[13px] font-bold whitespace-nowrap"
+                      style={
+                        pts > 0
+                          ? { background: tint('var(--color-nickel)', 22), color: deep('var(--color-nickel)', 65) }
+                          : { background: 'color-mix(in oklab, var(--color-ink) 7%, transparent)', color: 'var(--color-muted)' }
+                      }
+                    >
+                      {formatSignedPts(pts)}
+                    </span>
+                  </>
+                )}
               </motion.li>
             )
           })}
@@ -147,7 +168,7 @@ export function WeighInHistory({ me, mine }: { me: Player; mine: WeighIn[] }) {
             type="button"
             onClick={() => setAll((v) => !v)}
             className="mt-1 min-h-12 w-full rounded-[18px] font-display text-[15px] font-semibold"
-            style={{ color: deep(me.color) }}
+            style={{ color: deep(me.color, 82) }}
           >
             {all ? 'Voir moins ▴' : `Voir les ${rows.length} pesées ▾`}
           </button>

@@ -32,9 +32,13 @@ import {
   type RingSituation,
   type WeighInBucket,
 } from '../content/phrases'
+import { NBSP, formatPts, lowerFirst, plural, startsWithVowelSound, typo } from './fr'
 import type { DayScore } from './scoring'
 import type { SeasonRecord } from './season'
 import type { CheckinValue, DayKey, Player } from './types'
+
+/** Une seule implémentation (core/fr.ts), réexportée ici pour les écrans qui l'importent d'ici. */
+export { formatPts }
 
 export interface StreakHighlight {
   playerId: string
@@ -117,10 +121,23 @@ function pickWeighted<T>(items: { item: T; weight: number }[], seed: string): T 
 
 type Vars = Record<string, string | number | null | undefined>
 
-/** Remplit les {trous} ; `null` si un trou ne peut pas être rempli. */
+/** « de {x} », « que {x} » (et « De », « Que ») juste devant un trou : à élider si besoin. */
+const ELIDABLE = /(?<![\p{L}\p{N}])(de|De|que|Que) \{(\w+)\}/gu
+
+/**
+ * Remplit les {trous} ; `null` si un trou ne peut pas être rempli.
+ * - « de {other} » devient « d’Arthus » (et « que {x} » → « qu’… ») si la valeur commence
+ *   par une voyelle ;
+ * - le résultat passe par typo() : espaces insécables à la française, apostrophe courbe.
+ */
 export function fillTemplate(text: string, vars: Vars): string | null {
+  const elided = text.replace(ELIDABLE, (match, word: string, key: string) => {
+    const v = vars[key]
+    if (v === null || v === undefined || v === '') return match
+    return startsWithVowelSound(String(v)) ? `${word.slice(0, -1)}’{${key}}` : match
+  })
   let missing = false
-  const out = text.replace(/\{(\w+)\}/g, (match, key: string) => {
+  const out = elided.replace(/\{(\w+)\}/g, (match, key: string) => {
     const v = vars[key]
     if (v === null || v === undefined || v === '') {
       missing = true
@@ -128,18 +145,7 @@ export function fillTemplate(text: string, vars: Vars): string | null {
     }
     return String(v)
   })
-  return missing ? null : out
-}
-
-const NBSP = ' '
-
-/** « 1 pt », « 40 pts ». */
-export function formatPts(n: number): string {
-  return `${n}${NBSP}${Math.abs(n) <= 1 ? 'pt' : 'pts'}`
-}
-
-function formatDays(n: number): string {
-  return `${n}${NBSP}${Math.abs(n) <= 1 ? 'jour' : 'jours'}`
+  return missing ? null : typo(out)
 }
 
 /** Écart : égalité, petit (< 30), moyen (30 à 100), gros (> 100). */
@@ -247,12 +253,12 @@ function ringVars(ctx: RingTauntContext, situation: RingSituation): Vars {
     gap: formatPts(Math.abs(ctx.myTotal - ctx.otherTotal)),
     myTotal: ctx.myTotal,
     otherTotal: ctx.otherTotal,
-    daysLeft: formatDays(ctx.daysLeft),
-    hour: ctx.hour,
+    daysLeft: plural(ctx.daysLeft, 'jour'),
+    hour: `${ctx.hour}${NBSP}h`,
     maxPoints: formatPts(RULES.weighIn.maxPoints),
     habit: streak?.habitName,
     emoji: streak?.emoji,
-    days: streak?.days,
+    days: streak ? plural(streak.days, 'jour') : undefined,
     myWins: ctx.record.wins[ctx.me.id] ?? 0,
     otherWins: ctx.record.wins[ctx.other.id] ?? 0,
     winStreak: ctx.record.streak.playerId === ctx.me.id ? ctx.record.streak.count : undefined,
@@ -292,7 +298,7 @@ export function pickRingTaunt(ctx: RingTauntContext): string {
   // Filet de sécurité (si quelqu'un vide les listes de phrases).
   if (facts.lead === 'tie') return 'Égalité parfaite. Ça sent la bagarre 🥊'
   const leader = facts.lead === 'me' ? ctx.me : ctx.other
-  return `${leader.name} mène de ${formatPts(Math.abs(ctx.myTotal - ctx.otherTotal))} 😏`
+  return typo(`${leader.name} mène de ${formatPts(Math.abs(ctx.myTotal - ctx.otherTotal))} 😏`)
 }
 
 // ─── Check-in ───────────────────────────────────────────────────────────────
@@ -304,6 +310,11 @@ export interface CheckinLineContext {
   /** Réponses du jour, par habitude. */
   answers: { habitName: string; emoji: string; badgeKey: string | null; value: CheckinValue | null }[]
   seed: DayKey
+  /**
+   * Check-in du jour (défaut) ou rattrapage d'hier (false) : en rattrapage, les phrases
+   * sont au passé, sans « aujourd’hui » ni « demain ».
+   */
+  isToday?: boolean
 }
 
 /** État de la journée pour choisir la phrase du check-in. */
@@ -347,30 +358,36 @@ export function pickCheckinLine(ctx: CheckinLineContext): string {
   const base: Vars = {
     name: ctx.player.name,
     score: ctx.day.score,
-    left: Math.max(0, ctx.day.total - ctx.day.filled),
+    max: RULES.week.dailyMax,
+    left: plural(Math.max(0, ctx.day.total - ctx.day.filled), 'habitude'),
   }
-  const candidates = CHECKIN_PHRASES.filter((p) => p.state === state).map((p) => {
+  const when = ctx.isToday === false ? 'yesterday' : 'today'
+  const candidates = CHECKIN_PHRASES.filter((p) => p.state === state && (p.when === undefined || p.when === when)).map((p) => {
     const answer = p.habit ? concerned.find((a) => a.badgeKey === p.habit) : featured
-    if (p.habit && !answer) return { text: null, specificity: 1 }
-    return {
-      text: fillTemplate(p.text, { ...base, habit: answer?.habitName, emoji: answer?.emoji }),
-      specificity: p.habit ? 1 : 0,
-    }
+    // Une phrase ciblée (habitude, jour) est favorisée par rapport à une phrase générique.
+    const specificity = (p.habit ? 1 : 0) + (p.when ? 1 : 0)
+    if (p.habit && !answer) return { text: null, specificity }
+    return { text: fillTemplate(p.text, { ...base, habit: answer?.habitName, emoji: answer?.emoji }), specificity }
   })
   const line = choose(candidates, `${ctx.seed}|${ctx.player.id}|${state}|${concerned.map((a) => a.habitName).join(',')}`)
   if (line) return line
-  if (state === 'perfect') return 'Journée parfaite ! 🎉'
+  if (state === 'perfect') return typo('Journée parfaite ! 🎉')
   if (state === 'empty' || state === 'partial') return 'Encore un petit effort, tout se remplit en 15 secondes ⏱️'
   return 'Check-in bouclé ✅'
 }
 
 // ─── Pesée ──────────────────────────────────────────────────────────────────
 
-/** Tranche de la réaction à une pesée. */
-export function weighInBucket(changePct: number | null, points: number): WeighInBucket {
+/**
+ * Tranche de la réaction à une pesée. `inGoalZone` : la pesée est dans la zone objectif
+ * (isInGoalZone(w.goalDistancePct) de core/scoring.ts). Sans elle, jamais de 'goal' :
+ * une perte de −0,995 % arrondie à 100 pts n'est pas une « zone objectif tenue ».
+ */
+export function weighInBucket(changePct: number | null, points: number, inGoalZone = false): WeighInBucket {
   const { maxPoints, fullPointsLossPct } = RULES.weighIn
   if (changePct === null) return 'start'
-  if (points >= maxPoints) return changePct > -fullPointsLossPct + 1e-9 ? 'goal' : 'max'
+  // 'goal' : les points viennent de la zone objectif, pas de la perte (sinon c'est 'max').
+  if (points >= maxPoints) return inGoalZone && changePct > -fullPointsLossPct + 1e-9 ? 'goal' : 'max'
   if (points >= 60) return 'great'
   if (points >= 30) return 'good'
   if (points > 0) return 'small'
@@ -380,9 +397,15 @@ export function weighInBucket(changePct: number | null, points: number): WeighIn
 /**
  * Réaction à une pesée (on parle de points et d'effort, jamais du corps).
  * `seed` (facultatif, ex. le jour) fait varier la phrase ; sans graine, la première.
+ * `inGoalZone` : voir weighInBucket.
  */
-export function weighInReaction(changePct: number | null, points: number, seed?: string): { emoji: string; text: string } {
-  const bucket = weighInBucket(changePct, points)
+export function weighInReaction(
+  changePct: number | null,
+  points: number,
+  seed?: string,
+  inGoalZone = false,
+): { emoji: string; text: string } {
+  const bucket = weighInBucket(changePct, points, inGoalZone)
   const list = WEIGHIN_REACTIONS[bucket]
   const chosen = seed === undefined ? list[0] : pickWeighted(list.map((item) => ({ item, weight: 1 })), `${seed}|weighin|${bucket}`)
   const text = chosen ? fillTemplate(chosen.text, { points: formatPts(points) }) : null
@@ -395,8 +418,15 @@ export function weighInReaction(changePct: number | null, points: number, seed?:
 export interface ResultsLineExtra {
   /** Écart final en points. */
   gap?: number
-  /** Le gage de la manche. */
+  /** Le gage de la manche (inséré dans la phrase avec une minuscule : « au programme : vaisselle… »). */
   stake?: string | null
+}
+
+/** Le gage, prêt à être inséré après « au programme : » (minuscule, sauf s'il commence par un prénom). */
+function stakeInSentence(stake: string | null | undefined, names: (string | undefined)[]): string | undefined {
+  const s = stake?.trim()
+  if (!s) return undefined
+  return names.some((n) => n && s.startsWith(n)) ? s : lowerFirst(s)
 }
 
 /** Phrases de la cérémonie des résultats. */
@@ -412,14 +442,14 @@ export function resultsLine(
     winner: winner?.name,
     loser: loser?.name,
     gap: extra.gap === undefined ? undefined : formatPts(Math.abs(extra.gap)),
-    stake: extra.stake?.trim() || undefined,
+    stake: stakeInSentence(extra.stake, [winner?.name, loser?.name]),
   }
   const candidates = RESULTS_PHRASES.filter((p) => p.kind === kind)
     .filter((p) => p.gap === undefined || (gap !== null && gap !== 'tie' && oneOf(p.gap, gap)))
     .map((p) => ({ text: fillTemplate(p.text, vars), specificity: p.gap === undefined ? 0 : 1 }))
   const line = choose(candidates, `${seed}|results|${kind}`)
   if (line) return line
-  if (kind === 'tie') return 'Égalité ! Gage pour les deux 🤝'
+  if (kind === 'tie') return typo('Égalité ! Gage pour les deux 🤝')
   if (kind === 'winner') return winner ? `${winner.name} remporte la manche 👑` : 'Victoire 👑'
   return loser ? `${loser.name}, c’est l’heure du gage 😭` : 'C’est l’heure du gage 😭'
 }

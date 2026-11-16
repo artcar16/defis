@@ -2,8 +2,11 @@
  * La grande carte du Ring : scores face à face, tir à la corde, phrase du commentateur.
  */
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
+import { ptsUnit } from '../../core/fr'
 import type { DayScore } from '../../core/scoring'
+import { deep, tint } from '../../ui/color'
 import { AnimatedNumber, Pill, springy } from '../../ui/kit'
+import { KeepHyphenated } from './KeepHyphenated'
 import { TugOfWar, type ArenaPulse } from './TugOfWar'
 import type { RingData, RingSide } from './useRingData'
 
@@ -64,7 +67,7 @@ function ScoreSide({
         <motion.span
           key={pulseKey}
           className="pointer-events-none absolute -inset-2 rounded-[20px]"
-          style={{ background: `color-mix(in oklab, ${player.color} 22%, transparent)` }}
+          style={{ background: tint(player.color, 22, 'transparent') }}
           initial={{ opacity: 1 }}
           animate={{ opacity: 0 }}
           transition={{ duration: 1.8, ease: 'easeOut' }}
@@ -72,23 +75,23 @@ function ScoreSide({
       )}
       <div
         className={`relative flex max-w-full items-center gap-1.5 font-display text-[17px] leading-tight font-semibold ${right ? 'flex-row-reverse' : ''}`}
-        style={{ color: `color-mix(in oklab, ${player.color} 72%, var(--color-ink))` }}
+        style={{ color: deep(player.color, 72) }}
       >
         <span className="truncate">{player.name}</span>
         {isMe && (
           <span
             className="shrink-0 rounded-full px-1.5 py-px text-[11px] font-bold tracking-wide uppercase"
-            style={{ background: `color-mix(in oklab, ${player.color} 18%, transparent)` }}
+            style={{ background: tint(player.color, 18, 'transparent') }}
           >
             toi
           </span>
         )}
       </div>
       <div className="relative flex items-baseline gap-1">
-        <span style={{ color: `color-mix(in oklab, ${player.color} 88%, var(--color-ink))` }}>
+        <span style={{ color: deep(player.color, 88) }}>
           <AnimatedNumber value={total} className="text-[clamp(36px,11.8vw,46px)] leading-none" />
         </span>
-        <span className="font-display text-[15px] font-semibold text-muted">pts</span>
+        <span className="font-display text-[15px] font-semibold text-muted">{ptsUnit(total)}</span>
       </div>
       <TodayStatus day={today} />
     </div>
@@ -162,7 +165,7 @@ export function Commentator({ text, reduced }: { text: string; reduced: boolean 
               exit={reduced ? { opacity: 0 } : { opacity: 0, y: -8 }}
               transition={{ duration: 0.22 }}
             >
-              {text}
+              <KeepHyphenated text={text} />
             </motion.p>
           </AnimatePresence>
         </div>
