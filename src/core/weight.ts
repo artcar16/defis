@@ -5,6 +5,10 @@
 import { percentChange } from './scoring'
 import type { DayKey, PlayerId, WeighIn } from './types'
 
+function compareKeys(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0
+}
+
 export interface RawWeighIn {
   playerId: PlayerId
   day: DayKey
@@ -29,7 +33,7 @@ export function deriveWeighIns(
   }
   const out: WeighIn[] = []
   for (const [playerId, list] of byPlayer) {
-    list.sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : 0))
+    list.sort((a, b) => compareKeys(a.day, b.day))
     const start = list[0]
     list.forEach((r, i) => {
       const goal = goalAt(playerId, r.day)
@@ -43,12 +47,12 @@ export function deriveWeighIns(
       })
     })
   }
-  return out.sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : a.playerId < b.playerId ? -1 : 1))
+  return out.sort((a, b) => compareKeys(a.day, b.day) || compareKeys(a.playerId, b.playerId))
 }
 
 /** Pesées d'un joueur, dans l'ordre chronologique. */
 export function weighInsOf(weighIns: WeighIn[], playerId: PlayerId): WeighIn[] {
-  return weighIns.filter((w) => w.playerId === playerId).sort((a, b) => (a.day < b.day ? -1 : 1))
+  return weighIns.filter((w) => w.playerId === playerId).sort((a, b) => compareKeys(a.day, b.day))
 }
 
 /** Dernière pesée d'un joueur strictement avant un jour (pour préremplir / comparer). */
@@ -60,17 +64,25 @@ export function lastWeighInBefore(weighIns: WeighIn[], playerId: PlayerId, day: 
   return found
 }
 
-/** Formate une variation en % à la française : « −0,8 % », « +0,3 % », « 0 % ». */
-export function formatPct(pct: number | null | undefined, digits = 1): string {
-  if (pct === null || pct === undefined || Number.isNaN(pct)) return '—'
-  const rounded = Number(pct.toFixed(digits))
-  if (rounded === 0) return '0 %'
-  const sign = rounded > 0 ? '+' : '−'
-  return `${sign}${Math.abs(rounded).toLocaleString('fr-FR', { minimumFractionDigits: digits, maximumFractionDigits: digits })} %`
+/** Espace insécable entre le nombre et l'unité (« −0,8 % » ne se coupe pas en fin de ligne). */
+const NBSP = '\u00a0'
+
+/** Nombre à la française (virgule décimale), sans dépendre des données de locale du moteur. */
+function frNumber(n: number, digits: number): string {
+  return n.toFixed(digits).replace('.', ',')
 }
 
-/** Formate un poids : « 72,4 kg ». */
+/** Formate une variation en % à la française : « −0,8 % », « +0,3 % », « 0 % » (espace insécable). */
+export function formatPct(pct: number | null | undefined, digits = 1): string {
+  if (pct === null || pct === undefined || !Number.isFinite(pct)) return '—'
+  const rounded = Number(pct.toFixed(digits))
+  if (rounded === 0) return `0${NBSP}%`
+  const sign = rounded > 0 ? '+' : '−'
+  return `${sign}${frNumber(Math.abs(rounded), digits)}${NBSP}%`
+}
+
+/** Formate un poids : « 72,4 kg » (espace insécable). */
 export function formatKg(kg: number | null | undefined): string {
-  if (kg === null || kg === undefined) return '— kg'
-  return `${kg.toLocaleString('fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kg`
+  if (kg === null || kg === undefined || !Number.isFinite(kg)) return `—${NBSP}kg`
+  return `${frNumber(kg, 1)}${NBSP}kg`
 }
