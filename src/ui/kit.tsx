@@ -191,9 +191,17 @@ export function Sheet({
           transition={{ type: 'spring', stiffness: 320, damping: 34 }}
           role="dialog"
           aria-modal="true"
-          style={tone ? { backgroundImage: `linear-gradient(180deg, color-mix(in oklab, ${tone} 22%, transparent), transparent 320px)` } : undefined}
+          style={
+            tone
+              ? {
+                  // Le dégradé d'ambiance par-dessus les pois de .app-bg (sans se répéter en tuiles de 22 px).
+                  backgroundImage: `linear-gradient(180deg, color-mix(in oklab, ${tone} 22%, transparent), transparent 320px), radial-gradient(color-mix(in oklab, var(--color-ink) 5%, transparent) 1.2px, transparent 1.3px)`,
+                  backgroundSize: 'auto, 22px 22px',
+                }
+              : undefined
+          }
         >
-          <div className="safe-top sticky top-0 z-10 mx-auto flex w-full max-w-md items-center justify-between px-4 pb-2">
+          <div className="safe-top sticky top-0 z-10 mx-auto flex w-full max-w-md items-center justify-between bg-bg/85 px-4 pb-2 backdrop-blur-md">
             <div className="font-display text-xl font-semibold">{title}</div>
             <motion.button
               type="button"

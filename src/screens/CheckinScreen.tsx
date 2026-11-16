@@ -4,8 +4,8 @@
  * bascule « Aujourd'hui / Hier » pour rattraper un oubli (pas le lundi : manche close).
  * Objectif : moins de 15 secondes. Ne lit les données que via useDuel().
  */
-import { AnimatePresence, PresenceContext, motion, useReducedMotion } from 'motion/react'
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { pointsFor } from '../core/scoring'
 import type { CheckinValue } from '../core/types'
 import { useDuel } from '../data/DuelProvider'
@@ -25,21 +25,6 @@ import { useCheckin, type CheckinView, type DayChoice } from './checkin/useCheck
 const VISIBLE_TOP = 84
 const VISIBLE_BOTTOM = 124
 
-/**
- * La coque monte les onglets dans <AnimatePresence initial={false}> : sans ça, les animations
- * d'entrée du premier écran affiché seraient sautées. On repart d'un contexte neutre.
- */
-function FreshMotion({ children }: { children: ReactNode }) {
-  return <PresenceContext.Provider value={null}>{children}</PresenceContext.Provider>
-}
-
-export function CheckinScreen() {
-  return (
-    <FreshMotion>
-      <Checkin />
-    </FreshMotion>
-  )
-}
 
 /** Fait défiler doucement pour que l'élément soit entièrement visible (s'il ne l'est pas déjà). */
 function reveal(el: HTMLElement | null | undefined, smooth: boolean) {
@@ -52,7 +37,7 @@ function reveal(el: HTMLElement | null | undefined, smooth: boolean) {
   window.scrollTo({ top: window.scrollY + rect.top - offset, behavior: smooth ? 'smooth' : 'auto' })
 }
 
-function Checkin() {
+export function CheckinScreen() {
   const { me, other } = useDuel()
   const { setTab, openSheet } = useNav()
   const toast = useToast()

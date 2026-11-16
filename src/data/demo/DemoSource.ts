@@ -2,7 +2,7 @@
  * Source de données de la maquette : tout en mémoire (+ localStorage), sans backend.
  * Simule l'adversaire en temps réel pour voir le Ring bouger et les toasts.
  */
-import { addDays, dayKeyAt, diffDays, nextMonday, weekStartOf } from '../../core/dates'
+import { addDays, atSameTimeOn, dayKeyAt, nextMonday, weekStartOf } from '../../core/dates'
 import { canEditCheckin, canWeighIn, percentChange, valuesFor } from '../../core/scoring'
 import { isStakeEditable } from '../../core/season'
 import type { CheckinValue, DayKey, DuelSnapshot, Habit, PlayerId, Proposal, ProposalPayload } from '../../core/types'
@@ -11,6 +11,16 @@ import type { Activity, DemoControls, DuelSource, HabitLookPatch, ProfilePatch }
 import { generateDemoState, makeRng, type DemoState } from './generate'
 
 const STORAGE_KEY = 'duel-demo-v1'
+/** Badges déjà célébrés (écran Badges) : effacés par « Remettre à zéro » pour revoir les cérémonies. */
+const BADGES_SEEN_PREFIX = 'duel-badges-seen-'
+
+function clearBadgesSeen() {
+  try {
+    for (const key of Object.keys(localStorage)) if (key.startsWith(BADGES_SEEN_PREFIX)) localStorage.removeItem(key)
+  } catch {
+    // Stockage indisponible : rien à effacer.
+  }
+}
 
 function load(): DemoState | null {
   try {
@@ -51,18 +61,18 @@ export class DemoSource implements DuelSource, DemoControls {
   constructor() {
     const realToday = dayKeyAt(new Date())
     const params = typeof location !== 'undefined' ? new URLSearchParams(location.search) : new URLSearchParams()
+    if (params.has('reset')) clearBadgesSeen()
     const stored = params.has('reset') ? null : load()
-    this.state = stored && stored.anchorReal === realToday ? stored : generateDemoState(realToday, realToday, stored?.meId ?? 'arthus')
     // Paramètres d'URL pratiques pour tester : ?as=laetitia&day=2026-11-19
-    const as = params.get('as')
-    const day = params.get('day')
-    if (day && /^\d{4}-\d{2}-\d{2}$/.test(day) && day !== this.state.today) {
-      this.state = generateDemoState(day, realToday, this.state.meId)
-    }
-    if (as === 'arthus' || as === 'laetitia') {
-      this.state.meId = as
-      this.state.signedIn = true
-    }
+    const asParam = params.get('as')
+    const as: PlayerId | null = asParam === 'arthus' || asParam === 'laetitia' ? asParam : null
+    const dayParam = params.get('day')
+    const day = dayParam && /^\d{4}-\d{2}-\d{2}$/.test(dayParam) ? dayParam : null
+    const meId = as ?? stored?.meId ?? 'arthus'
+    const reusable = stored && stored.anchorReal === realToday && stored.meId === meId && (!day || day === stored.today)
+    // On régénère avec le bon joueur : les données « l'autre s'est déjà pesé ce matin » dépendent de qui est « moi ».
+    this.state = reusable ? stored : generateDemoState(day ?? stored?.today ?? realToday, realToday, meId)
+    if (as) this.state.signedIn = true
     // ?seen=1 : ne pas ouvrir la cérémonie automatiquement (pratique pour les captures).
     if (params.get('seen') === '1') {
       const last = addDays(weekStartOf(this.state.today), -7)
@@ -86,9 +96,9 @@ export class DemoSource implements DuelSource, DemoControls {
     return () => this.listeners.delete(listener)
   }
 
+  /** Le jour simulé, à l'heure réelle de Paris. */
   now(): Date {
-    const realToday = dayKeyAt(new Date())
-    return new Date(Date.now() + diffDays(realToday, this.state.today) * 86_400_000)
+    return atSameTimeOn(this.state.today, new Date())
   }
 
   get signedIn(): boolean {
@@ -204,7 +214,8 @@ export class DemoSource implements DuelSource, DemoControls {
     const other = this.otherId
     this.later(4500, () => {
       const p = this.state.proposals.find((x) => x.id === proposal.id)
-      if (!p || p.status !== 'pending') return
+      // Si on a changé de joueur entre-temps, c'est à « moi » de répondre : pas de réponse automatique.
+      if (!p || p.status !== 'pending' || this.state.meId !== p.authorId) return
       this.decide(p, true)
       this.commit({ kind: 'proposal_accepted', playerId: other, text: `✅ ${this.nameOf(other)} a accepté ta proposition (effet lundi)` })
     })
@@ -331,6 +342,11 @@ export class DemoSource implements DuelSource, DemoControls {
     const keep = this.state
     this.state = generateDemoState(day, dayKeyAt(new Date()), keep.meId)
     this.state.signedIn = keep.signedIn
+    // On garde les cérémonies déjà vues (sinon elle se rouvre à chaque voyage) et la liste de gages.
+    for (const p of this.state.players) {
+      this.state.seenResults[p.id] = [...new Set([...(this.state.seenResults[p.id] ?? []), ...(keep.seenResults[p.id] ?? [])])]
+    }
+    this.state.settings.gages = [...keep.settings.gages]
     // On garde la personnalisation des joueurs.
     this.state.players = this.state.players.map((p) => {
       const old = keep.players.find((o) => o.id === p.id)
@@ -355,6 +371,7 @@ export class DemoSource implements DuelSource, DemoControls {
   reset(): void {
     const signedIn = this.state.signedIn
     const realToday = dayKeyAt(new Date())
+    clearBadgesSeen()
     this.state = generateDemoState(realToday, realToday, this.state.meId)
     this.state.signedIn = signedIn
     this.timers.forEach((t) => clearTimeout(t))

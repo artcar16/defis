@@ -1,7 +1,7 @@
 /**
  * Coque de l'app : onglets, feuilles (pesée, résultats), toasts temps réel.
  */
-import { AnimatePresence, motion } from 'motion/react'
+import { AnimatePresence, PresenceContext, motion } from 'motion/react'
 import { useEffect, useRef, type CSSProperties } from 'react'
 import { pendingResultsWeek } from './core/season'
 import { DuelProvider, useDuel } from './data/DuelProvider'
@@ -46,6 +46,12 @@ function Shell() {
   }, [pendingWeek, sheet, openSheet])
 
   const vars = { ['--me' as string]: me.color, ['--other' as string]: other.color } as CSSProperties
+  // Aussi sur <html>, pour ce qui est rendu dans un portail (feuilles, célébrations).
+  useEffect(() => {
+    const root = document.documentElement.style
+    root.setProperty('--me', me.color)
+    root.setProperty('--other', other.color)
+  }, [me.color, other.color])
 
   if (!signedIn) {
     return (
@@ -67,7 +73,11 @@ function Shell() {
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.18 }}
           >
-            <Screen />
+            {/* Contexte neutre : les animations d'entrée et les boucles de l'écran tournent
+                normalement, y compris pour le premier écran affiché (initial={false} ci-dessus). */}
+            <PresenceContext.Provider value={null}>
+              <Screen />
+            </PresenceContext.Provider>
           </motion.div>
         </AnimatePresence>
       </main>

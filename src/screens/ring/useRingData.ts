@@ -103,6 +103,8 @@ export function useRingData(): RingData {
       isWeighInDay: weighInDay,
       record: season.record,
       seed: today,
+      notStarted: season.notStarted,
+      myWeighInDone: weighInOf(me.id) !== null,
     })
 
     const yesterday = addDays(today, -1)

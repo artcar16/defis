@@ -32,6 +32,16 @@ export function hourAt(instant: Date, timezone: string = RULES.timezone): number
   return new TZDate(instant.getTime(), timezone).getHours()
 }
 
+/**
+ * Le jour `day`, à l'heure (à Paris) de l'instant donné. Sert à la démo pour « voyager »
+ * d'un jour à l'autre en gardant l'heure réelle, sans décalage aux changements d'heure.
+ */
+export function atSameTimeOn(day: DayKey, instant: Date, timezone: string = RULES.timezone): Date {
+  const t = new TZDate(instant.getTime(), timezone)
+  const [y, m, d] = day.split('-').map(Number)
+  return new Date(new TZDate(y, m - 1, d, t.getHours(), t.getMinutes(), t.getSeconds(), t.getMilliseconds(), timezone).getTime())
+}
+
 export function addDays(day: DayKey, n: number): DayKey {
   return toKey(new Date(parseUtc(day).getTime() + n * DAY_MS))
 }

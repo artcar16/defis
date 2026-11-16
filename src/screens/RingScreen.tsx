@@ -3,8 +3,7 @@
  * taquine, le statut du jour, l'enjeu, le bilan, et le gros bouton « Mon check-in ».
  * Se met à jour en direct quand l'autre joue (via useDuel()).
  */
-import { PresenceContext } from 'motion/react'
-import { useState, type ReactNode } from 'react'
+import { useState } from 'react'
 import { useDuel } from '../data/DuelProvider'
 import { activityEmoji } from './ring/format'
 import {
@@ -23,24 +22,8 @@ import { RingHero } from './ring/RingHero'
 import type { ArenaPulse } from './ring/TugOfWar'
 import { useRingData } from './ring/useRingData'
 
-/**
- * La coque monte les onglets dans <AnimatePresence initial={false}> : sans ça, toutes les
- * animations « au montage » du premier écran affiché (dont les boucles infinies : corde,
- * sueur, poussière…) seraient figées sur leur dernière image. On repart d'un contexte neutre.
- */
-function FreshMotion({ children }: { children: ReactNode }) {
-  return <PresenceContext.Provider value={null}>{children}</PresenceContext.Provider>
-}
 
 export function RingScreen() {
-  return (
-    <FreshMotion>
-      <Ring />
-    </FreshMotion>
-  )
-}
-
-function Ring() {
   const { season, lastActivity, other } = useDuel()
   const data = useRingData()
 
