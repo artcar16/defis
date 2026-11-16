@@ -3,7 +3,7 @@
  * Style « jeu mobile » : gros boutons arrondis, ombres douces, emojis XXL, rebonds.
  */
 import { AnimatePresence, motion, type HTMLMotionProps } from 'motion/react'
-import { useEffect, type CSSProperties, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, type CSSProperties, type ReactNode } from 'react'
 import type { Player } from '../core/types'
 import { onColor, resolveHex } from './color'
 
@@ -193,6 +193,12 @@ export function ProgressBar({
 
 // ─── Feuille plein écran (pesée, résultats) ──────────────────────────────────
 
+/**
+ * Bandeau posé en haut de toutes les feuilles, au-dessus de leur contenu. App y met la
+ * pastille « 🧪 Maquette · données inventées » en maquette (une feuille couvre l'écran).
+ */
+export const SheetBannerContext = createContext<ReactNode>(null)
+
 /** Feuille qui monte du bas, plein écran, avec bouton fermer. */
 export function Sheet({
   open,
@@ -208,6 +214,7 @@ export function Sheet({
   /** Couleur d'ambiance du haut de la feuille. */
   tone?: string
 }) {
+  const banner = useContext(SheetBannerContext)
   useEffect(() => {
     if (!open) return
     const prev = document.body.style.overflow
@@ -255,7 +262,10 @@ export function Sheet({
             </motion.button>
           </div>
           {/* Barre d'accueil de l'iPhone + 24 px d'air sous le dernier bouton. */}
-          <div className="mx-auto w-full max-w-md flex-1 px-4 pb-[calc(env(safe-area-inset-bottom)+24px)]">{children}</div>
+          <div className="mx-auto w-full max-w-md flex-1 px-4 pb-[calc(env(safe-area-inset-bottom)+24px)]">
+            {banner}
+            {children}
+          </div>
         </motion.div>
       )}
     </AnimatePresence>

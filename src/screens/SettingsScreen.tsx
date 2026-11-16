@@ -7,7 +7,8 @@
  */
 import { motion, useReducedMotion } from 'motion/react'
 import { plural } from '../core/fr'
-import { useDuel } from '../data/DuelProvider'
+import { versionText } from '../data/build'
+import { useDuel, type Backend } from '../data/DuelProvider'
 import { tint } from '../ui/color'
 import { ScreenHeader, springy } from '../ui/kit'
 import { ANCHORS, useNav } from '../ui/nav'
@@ -21,7 +22,7 @@ import { StakeSection } from './settings/StakeSection'
 import { WeighDaySection } from './settings/WeighDaySection'
 
 export function SettingsScreen() {
-  const { me, other, snapshot, demo } = useDuel()
+  const { me, other, snapshot, demo, backend } = useDuel()
   const pendingForMe = snapshot.proposals.filter((p) => p.status === 'pending' && p.authorId !== me.id).length
 
   return (
@@ -40,10 +41,30 @@ export function SettingsScreen() {
       {demo && <DemoSection index={6} />}
       <AccountSection index={demo ? 7 : 6} />
 
-      <p className="mt-6 text-center text-[13px] font-semibold text-muted">
-        Duel des Défauts 🥊 · avec ❤️ et mauvaise foi
-      </p>
+      <AboutFooter backend={backend} />
     </div>
+  )
+}
+
+/** Pied de page : la base utilisée (jamais la clé) et la version, pour vérifier un redéploiement. */
+function AboutFooter({ backend }: { backend: Backend }) {
+  const version = versionText()
+  return (
+    // text-ink-soft (pas text-muted) : c'est la ligne que le README fait lire, elle doit rester
+    // lisible en clair comme en sombre (contraste ≥ 4,5:1).
+    <footer className="mt-6 flex flex-col items-center gap-1 px-2 text-center text-[13px] leading-snug font-semibold text-ink-soft">
+      <p className="[overflow-wrap:anywhere]">
+        {backend.kind === 'supabase' ? (
+          <>
+            🔌 Branchée à Supabase · <span className="font-bold text-ink">{backend.host}</span>
+          </>
+        ) : (
+          <>🧪 Maquette · données inventées</>
+        )}
+      </p>
+      {version && <p>🏷️ {version}</p>}
+      <p className="mt-1 font-medium">Duel des Défauts 🥊 · avec ❤️ et mauvaise foi</p>
+    </footer>
   )
 }
 

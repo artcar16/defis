@@ -268,8 +268,11 @@ export class SupabaseSource implements DuelSource {
   private authSubscription: { unsubscribe(): void } | null = null
   private removeDomListeners: (() => void) | null = null
   private events: PendingEvent[] = []
-  /** Manches dont l'enjeu a été posé par ensure_stake (pas deux fois). */
-  private stakesDone = new Set<DayKey>()
+  /**
+   * Manches dont l'enjeu a été posé par ensure_stake (pas deux fois), avec le numéro de la
+   * dernière lecture lancée à ce moment-là : une lecture lancée APRÈS doit le contenir.
+   */
+  private stakesDone = new Map<DayKey, number>()
   private ensuringStakes = false
   /** Badges en cours d'enregistrement (le Provider redemande à chaque snapshot). */
   private badgesInFlight = new Set<string>()
@@ -740,6 +743,7 @@ export class SupabaseSource implements DuelSource {
     this.lastLoadAt = Date.now()
     this.retryDelay = RETRY_MS
     this.clearRetryTimer()
+    this.forgetErasedStakes(seq, snap)
     this.startChannel()
     this.emit(this.takeActivity(seq))
     void this.ensureStakes()
@@ -860,6 +864,17 @@ export class SupabaseSource implements DuelSource {
 
   // ─── Enjeu automatique (garantie 5) ──────────────────────────────────────
 
+  /**
+   * Un enjeu posé, puis absent d'une lecture lancée après : il a été effacé (remise à zéro
+   * dans le SQL Editor, app restée ouverte). On l'oublie, pour le tirer à nouveau. Une lecture
+   * lancée avant la pose ne compte pas (elle ne pouvait pas encore le voir).
+   */
+  private forgetErasedStakes(seq: number, snap: DuelSnapshot) {
+    for (const [ws, doneAt] of this.stakesDone) {
+      if (seq > doneAt && !snap.weeks.find((w) => w.weekStart === ws)?.stake?.trim()) this.stakesDone.delete(ws)
+    }
+  }
+
   /** Chaque manche commencée sans enjeu en reçoit un, tiré avec drawStake (le même sur les deux téléphones). */
   private async ensureStakes(): Promise<void> {
     if (!RULES.stake.autoDrawOnMonday || this.ensuringStakes || !this._signedIn) return
@@ -875,7 +890,7 @@ export class SupabaseSource implements DuelSource {
         if (!stake) continue
         try {
           const placed = await this.call('ensure_stake', { p_week: ws, p_stake: stake })
-          this.stakesDone.add(ws)
+          this.stakesDone.set(ws, this.loadSeq)
           known.set(ws, typeof placed === 'string' && placed.trim() ? placed : stake)
           changed = true
         } catch {

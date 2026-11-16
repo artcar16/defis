@@ -1,6 +1,9 @@
 /**
  * Petits toasts en haut de l'écran (« 👀 Laetitia vient de faire son check-in »).
  * Purement informatifs : ils laissent passer les taps et ne couvrent jamais le ✕ des feuilles.
+ * En maquette (`note`), chaque toast le rappelle : il s'affiche juste par-dessus la pastille
+ * 🧪, et c'est précisément le « check-in de Laetitia » inventé qu'on ne doit pas prendre pour
+ * le vrai.
  */
 import { AnimatePresence, motion } from 'motion/react'
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
@@ -20,7 +23,7 @@ interface ToastItem extends ToastInput {
 
 const ToastContext = createContext<((t: ToastInput) => void) | null>(null)
 
-export function ToastProvider({ children }: { children: ReactNode }) {
+export function ToastProvider({ children, note }: { children: ReactNode; note?: string }) {
   const [items, setItems] = useState<ToastItem[]>([])
   const nextId = useRef(1)
   const timers = useRef(new Set<number>())
@@ -62,6 +65,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               role="status"
             >
               {t.text}
+              {note && <span className="mt-0.5 block font-body text-[13px] font-bold whitespace-nowrap text-ink-soft">{note}</span>}
             </motion.div>
           ))}
         </AnimatePresence>

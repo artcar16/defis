@@ -1,6 +1,6 @@
 /**
  * 7. 🧪 Démo : commandes de la maquette (changer de joueur, voyager dans le temps…).
- * N'apparaît que si useDuel().demo existe : disparaîtra avec la vraie connexion.
+ * N'apparaît qu'en maquette (useDuel().demo). Ouverte avec ?demo : de quoi revenir à la vraie app.
  */
 import { motion, useReducedMotion } from 'motion/react'
 import { useEffect, useState } from 'react'
@@ -49,7 +49,7 @@ export function DemoSection({ index }: { index: number }) {
       index={index}
       emoji="🧪"
       title="Démo"
-      subtitle="Mode démo — disparaîtra avec la vraie connexion"
+      subtitle="Maquette : données inventées, la vraie base n’est pas touchée"
       className="border-[3px] border-dashed"
       style={{ borderColor: tint('var(--color-gold)', 70, 'var(--color-line)'), background: tint('var(--color-gold)', 7) }}
     >
@@ -147,6 +147,12 @@ export function DemoSection({ index }: { index: number }) {
         >
           {confirmReset ? '⚠️ Sûr ? Tape encore pour tout effacer' : '🔄 Remettre la démo à zéro'}
         </Button>
+        {/* Ouverte avec ?demo : on revient à l'adresse sans ?demo (la vraie app, ou « pas branchée »). */}
+        {demo.reason === 'asked' && (
+          <a href={location.pathname} className="btn-chunky btn-soft min-h-12 w-full px-5 py-2 text-[17px]">
+            🔌 Quitter la maquette
+          </a>
+        )}
       </div>
     </Section>
   )

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { projectUrl, supabaseConfig } from './config'
-import { classifyError, isCodeFormatOk, MESSAGES, toUserMessage } from './errors'
+import { cleanValue, parseProjectUrl, projectHost, projectUrl } from './config'
+import { classifyError, isCodeFormatOk, MESSAGES, offlineHint, toUserMessage } from './errors'
 
 describe('erreurs Supabase → français', () => {
   it('classe les erreurs du contrat (api.ts)', () => {
@@ -74,48 +74,78 @@ describe('erreurs Supabase → français', () => {
   })
 })
 
-describe('supabaseConfig · vraie base ou maquette', () => {
-  const env = { VITE_SUPABASE_URL: 'https://abcd.supabase.co/', VITE_SUPABASE_PUBLISHABLE_KEY: 'sb_publishable_xyz' }
-
-  it('les deux variables présentes : la vraie base', () => {
-    expect(supabaseConfig(env, '')).toEqual({ url: 'https://abcd.supabase.co', key: 'sb_publishable_xyz' })
+describe('serveur injoignable : on montre l’adresse utilisée (UX-2)', () => {
+  it('« Impossible de joindre le serveur » sur la vraie base : l’hôte, et où le corriger', () => {
+    const hint = offlineHint(MESSAGES.offline, 'abcdefghijklmnop.supabase.com')
+    expect(hint).toContain('abcdefghijklmnop.supabase.com')
+    expect(hint).toContain('VITE_SUPABASE_URL')
+    expect(hint).toContain('.supabase.co')
+    expect(hint).toContain('pas en pause')
+    expect(hint).toContain('Serveur utilisé\u00a0: ')
   })
 
-  it('?demo force la maquette', () => {
-    expect(supabaseConfig(env, '?demo')).toBeNull()
-    expect(supabaseConfig(env, '?as=arthus&demo=1')).toBeNull()
+  it('rien pour les autres problèmes, ni en maquette (pas d’hôte)', () => {
+    for (const problem of [null, MESSAGES.stale, MESSAGES.badKey, MESSAGES.dbNotReady, MESSAGES.serverError]) {
+      expect(offlineHint(problem, 'abcd.supabase.co')).toBeNull()
+    }
+    expect(offlineHint(MESSAGES.offline, null)).toBeNull()
   })
+})
 
-  it('variable absente ou vide : la maquette', () => {
-    expect(supabaseConfig({}, '')).toBeNull()
-    expect(supabaseConfig({ VITE_SUPABASE_URL: env.VITE_SUPABASE_URL }, '')).toBeNull()
-    expect(supabaseConfig({ ...env, VITE_SUPABASE_PUBLISHABLE_KEY: '  ' }, '')).toBeNull()
-  })
-
+describe('config · URL du projet et clés (le choix du mode : ../mode.test.ts)', () => {
   it('URL recopiée avec /rest/v1 (ou /auth/v1) : on garde juste l’adresse du projet (C3)', () => {
     const warn = console.warn
     const warnings: unknown[] = []
     console.warn = (...args: unknown[]) => warnings.push(args)
     try {
       for (const url of ['https://abcd.supabase.co/rest/v1', 'https://abcd.supabase.co/rest/v1/', 'https://abcd.supabase.co/auth/v1', ' https://abcd.supabase.co/REST/V1// ']) {
-        expect(supabaseConfig({ ...env, VITE_SUPABASE_URL: url }, '')?.url, url).toBe('https://abcd.supabase.co')
+        expect(parseProjectUrl(url), url).toBe('https://abcd.supabase.co')
       }
       expect(warnings).toHaveLength(4)
       expect(projectUrl('https://abcd.supabase.co')).toBe('https://abcd.supabase.co')
       expect(projectUrl('http://127.0.0.1:54321/')).toBe('http://127.0.0.1:54321')
       expect(warnings).toHaveLength(4)
+      // On ne journalise jamais que le bout de chemin enlevé.
+      expect(JSON.stringify(warnings)).not.toContain('abcd')
     } finally {
       console.warn = warn
     }
   })
 
-  it('URL qui n’en est pas une : la maquette plutôt qu’un plantage', () => {
-    const warn = console.warn
-    console.warn = () => {}
-    try {
-      expect(supabaseConfig({ ...env, VITE_SUPABASE_URL: 'abcd.supabase.co' }, '')).toBeNull()
-    } finally {
-      console.warn = warn
+  it('URL qui n’en est pas une, ou adresse du tableau de bord : null (pas de plantage)', () => {
+    for (const url of [
+      'sb_publishable_xyz',
+      'ftp://abcd.supabase.co',
+      '',
+      '   ',
+      'https://supabase.com/dashboard/project/abcd',
+      'https://app.supabase.com/project/abcd',
+      // UX-2 : « .com » au lieu de « .co », la base elle-même, le pooler, des identifiants.
+      'https://abcdefghijklmnop.supabase.com',
+      'https://db.abcd.supabase.co',
+      'https://aws-0-eu-west-3.pooler.supabase.com',
+      'https://user:pass@abcd.supabase.co',
+      'postgresql://postgres:[YOUR-PASSWORD]@db.abcd.supabase.co:5432/postgres',
+    ]) {
+      expect(parseProjectUrl(url), url).toBeNull()
     }
+    expect(parseProjectUrl('"https://abcd.supabase.co"')).toBe('https://abcd.supabase.co')
+    expect(parseProjectUrl('http://127.0.0.1:54321')).toBe('http://127.0.0.1:54321')
+    // Sans https:// devant, ou en http : c'est bien le projet (https ajouté).
+    expect(parseProjectUrl('abcd.supabase.co')).toBe('https://abcd.supabase.co')
+    expect(parseProjectUrl('http://abcd.supabase.co/')).toBe('https://abcd.supabase.co')
+  })
+
+  it('hôte du projet (public) pour les Réglages', () => {
+    expect(projectHost('https://abcd.supabase.co')).toBe('abcd.supabase.co')
+    expect(projectHost('http://127.0.0.1:54321')).toBe('127.0.0.1:54321')
+  })
+
+  it('valeurs nettoyées : espaces et guillemets autour', () => {
+    expect(cleanValue('  sb_publishable_x  ')).toBe('sb_publishable_x')
+    expect(cleanValue('"sb_publishable_x"')).toBe('sb_publishable_x')
+    expect(cleanValue(" 'sb_publishable_x' ")).toBe('sb_publishable_x')
+    expect(cleanValue('"sb_publishable_x')).toBe('"sb_publishable_x')
+    expect(cleanValue(undefined)).toBe('')
   })
 })

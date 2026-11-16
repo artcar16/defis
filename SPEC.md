@@ -227,6 +227,7 @@ _Points tranchés pendant le projet. Ils complètent (et priment sur) les sectio
 17. **Une proposition à la fois par sujet** : refaire une proposition sur le même sujet (objectif, jour de pesée, ou une même habitude : changer son type et la désactiver comptent comme un seul sujet) remplace celle en attente. Une proposition sur une habitude déjà désactivée ne peut plus être acceptée.
 18. **Objectif de poids privé** : l'autre ne voit jamais le poids objectif en kg, seulement le % depuis le départ, y compris dans les propositions (sauf si on a choisi de montrer ses kilos). Pour qu'on ne puisse pas retrouver les kilos à partir des %, le serveur arrondit les % envoyés à l'autre : au dixième en général, au centième entre 0 et −1 % (ce que les points de pesée montrent déjà), l'objectif au demi-%. Les points et les paliers 🪶 restent identiques sur les deux téléphones.
 19. **Tirage automatique** : le gage du lundi est tiré au sort de façon déterministe (même liste + même lundi = même gage), pour que les deux téléphones tirent le même sans se concerter. Jamais deux fois le même gage d'affilée quand la liste en propose d'autres.
+21. **Jamais de maquette par erreur** : sur le site déployé, sans réglages Supabase utilisables, l'app affiche « L'app n'est pas encore branchée » avec ce qui manque, au lieu de la maquette. La maquette (données inventées) ne s'ouvre qu'avec `?demo` et porte partout la pastille « 🧪 Maquette · données inventées ». Les variables aux noms Next.js (`NEXT_PUBLIC_SUPABASE_…`) sont acceptées ; une clé secrète est refusée.
 
 ## Journal des modifications
 
@@ -237,3 +238,5 @@ _Points tranchés pendant le projet. Ils complètent (et priment sur) les sectio
 | 2026-11-16 | Maquette relue (règles, rendu iPhone, textes, parcours, confidentialité) ; précisions 16 à 19. |
 | 2026-11-16 | Décision 20 : connexion par prénom + code au lieu de comptes email. Sécurité : accès aux données uniquement par des fonctions du serveur. |
 | 2026-11-16 | Base Supabase branchée (script SQL, temps réel). Après relecture de sécurité : décision 20 complétée (changer son code déconnecte ses autres appareils, déblocage, `duel.reset_code`), précisions 17 et 18 complétées (habitude = un seul sujet, % arrondis pour l'autre). |
+| 2026-11-16 | Script `supabase/remise-a-zero.sql` pour tout remettre à zéro depuis le SQL Editor : historique du jeu effacé, habitudes, jour de pesée et date de début (un lundi, pas dans le passé) remis au départ ; joueurs, codes, téléphones connectés et liste des gages gardés. |
+| 2026-11-16 | Précision 21 : jamais de maquette par erreur (écran « pas branchée », pastille Maquette, noms NEXT_PUBLIC_… acceptés). |

@@ -1,14 +1,18 @@
 /**
- * Coque de l'app : écran d'attente (premier chargement), connexion, puis onglets,
- * feuilles (pesée, résultats) et toasts temps réel.
+ * Coque de l'app : « pas branchée » (production sans réglages Supabase), écran d'attente
+ * (premier chargement), connexion, puis onglets, feuilles (pesée, résultats) et toasts temps
+ * réel. En maquette, une pastille le rappelle en haut de chaque écran.
  */
 import { AnimatePresence, PresenceContext, motion } from 'motion/react'
-import { useEffect, useRef, type CSSProperties } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { pendingResultsWeek } from './core/season'
 import { DuelProvider, useDuel } from './data/DuelProvider'
+import { currentMode } from './data/env'
+import { offlineHint } from './data/supabase/errors'
 import { BadgesScreen } from './screens/BadgesScreen'
 import { CheckinScreen } from './screens/CheckinScreen'
 import { LoginScreen, ProblemBanner } from './screens/LoginScreen'
+import { NotConnectedScreen } from './screens/NotConnectedScreen'
 import { ResultsSheet } from './screens/ResultsSheet'
 import { RingScreen } from './screens/RingScreen'
 import { SettingsScreen } from './screens/SettingsScreen'
@@ -16,6 +20,8 @@ import { SplashScreen } from './screens/SplashScreen'
 import { StatsScreen } from './screens/StatsScreen'
 import { WeighInSheet } from './screens/WeighInSheet'
 import { onColor } from './ui/color'
+import { DEMO_LABEL, DemoPill } from './ui/DemoPill'
+import { SheetBannerContext } from './ui/kit'
 import { NavProvider, useNav, type TabId } from './ui/nav'
 import { TabBar } from './ui/TabBar'
 import { ToastProvider, useToast } from './ui/toast'
@@ -43,7 +49,7 @@ function playerVars(meColor: string, otherColor: string): Record<string, string>
 }
 
 function Shell() {
-  const { me, other, signedIn, loading, problem, season, snapshot, lastActivity, playerById, source } = useDuel()
+  const { me, other, signedIn, loading, problem, season, snapshot, lastActivity, playerById, source, demo, backend } = useDuel()
   const { tab, setTab, sheet, openSheet, closeSheet } = useNav()
   const toast = useToast()
 
@@ -92,7 +98,11 @@ function Shell() {
   if (loading) {
     return (
       <div className="app-bg min-h-dvh text-ink" style={vars}>
-        <SplashScreen problem={problem} onRetry={() => source.retry()} />
+        <SplashScreen
+          problem={problem}
+          detail={offlineHint(problem, backend.kind === 'supabase' ? backend.host : null)}
+          onRetry={() => source.retry()}
+        />
       </div>
     )
   }
@@ -109,6 +119,8 @@ function Shell() {
   return (
     <div className="app-bg min-h-dvh text-ink" style={vars}>
       <main className="safe-top mx-auto max-w-md px-4 pb-[calc(env(safe-area-inset-bottom)+112px)]">
+        {/* Maquette : on le dit en haut de chaque écran, pour ne jamais la prendre pour la vraie partie. */}
+        {demo && <DemoPill className="pt-1" />}
         {/* Connecté mais bloqué (base pas à jour…) : on le dit, les données restent affichées. */}
         {problem && <ProblemBanner text={problem} className="mt-2 mb-2" />}
         <AnimatePresence mode="wait" initial={false}>
@@ -128,17 +140,25 @@ function Shell() {
         </AnimatePresence>
       </main>
       <TabBar />
-      <WeighInSheet open={sheet?.kind === 'weighin'} onClose={closeSheet} />
-      <ResultsSheet weekStart={sheet?.kind === 'results' ? sheet.weekStart : null} onClose={closeSheet} />
+      {/* Les feuilles couvrent tout l'écran : la pastille de la maquette y est aussi. */}
+      <SheetBannerContext.Provider value={demo ? <DemoPill className="pt-1 pb-2" /> : null}>
+        <WeighInSheet open={sheet?.kind === 'weighin'} onClose={closeSheet} />
+        <ResultsSheet weekStart={sheet?.kind === 'results' ? sheet.weekStart : null} onClose={closeSheet} />
+      </SheetBannerContext.Provider>
     </div>
   )
 }
 
 export default function App() {
+  // Vraie base, maquette ou « pas branchée » : décidé une fois au démarrage (src/data/mode.ts).
+  const [mode] = useState(currentMode)
+  // En production sans réglages utilisables : jamais de maquette en silence, on dit quoi faire.
+  if (mode.kind === 'unconfigured') return <NotConnectedScreen diagnosis={mode.diagnosis} />
   return (
-    <DuelProvider>
+    <DuelProvider mode={mode}>
       <NavProvider>
-        <ToastProvider>
+        {/* Maquette : chaque toast le rappelle (il se pose pile sur la pastille). */}
+        <ToastProvider note={mode.kind === 'demo' ? `🧪 ${DEMO_LABEL}` : undefined}>
           <Shell />
         </ToastProvider>
       </NavProvider>

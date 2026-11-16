@@ -4,17 +4,21 @@
  * 1. « Qui es-tu ? » : on touche son avatar (les deux joueurs face à face).
  * 2. Le code secret à 6 chiffres. Le tout premier code tapé pour un prénom devient le
  *    sien : on le fait taper deux fois (« Choisis », puis « Confirme-le »).
- * Le téléphone s'en souvient ensuite. En maquette : même parcours (n'importe quel code),
- * plus les raccourcis « Jouer en tant que ».
+ * Le téléphone s'en souvient ensuite. En maquette : une carte le dit clairement en haut
+ * (données inventées, n'importe quel code), même parcours, plus les raccourcis « Jouer en
+ * tant que ».
  */
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react'
 import { useEffect, useId, useState } from 'react'
 import { DEFAULT_PLAYERS } from '../config/defaults'
 import { plural, queName, typo } from '../core/fr'
 import type { Player, PlayerId } from '../core/types'
-import { useDuel } from '../data/DuelProvider'
+import { useDuel, type DemoContext } from '../data/DuelProvider'
+import { KEY_VAR, URL_VAR } from '../data/mode'
 import { CODE_LENGTH, type LoginPlayer } from '../data/source'
+import { offlineHint } from '../data/supabase/errors'
 import { deep, tint } from '../ui/color'
+import { DemoPill } from '../ui/DemoPill'
 import { errorText } from '../ui/format'
 import { Avatar, Button, springy } from '../ui/kit'
 import { useToast } from '../ui/toast'
@@ -66,7 +70,7 @@ const PHASE_TEXT: Record<Phase, { title: string; hint: string; cta: string; labe
 }
 
 export function LoginScreen() {
-  const { demo, snapshot, source, problem } = useDuel()
+  const { demo, snapshot, source, problem, backend } = useDuel()
   const toast = useToast()
   const reduced = useReducedMotion() ?? false
 
@@ -171,7 +175,8 @@ export function LoginScreen() {
   return (
     <div className="relative mx-auto flex min-h-dvh max-w-md flex-col overflow-hidden px-4 pt-[max(env(safe-area-inset-top),24px)] pb-[max(env(safe-area-inset-bottom),24px)]">
       {/* Décor */}
-      <div className="pointer-events-none absolute inset-0" aria-hidden="true">
+      {/* (En maquette, le décor descend sous la pastille.) */}
+      <div className={`pointer-events-none absolute inset-0 ${demo && !compact ? 'top-10' : ''}`} aria-hidden="true">
         {(compact ? FLOATERS_COMPACT : FLOATERS).map((f) => (
           <span
             key={f.e}
@@ -183,8 +188,11 @@ export function LoginScreen() {
         ))}
       </div>
 
+      {/* Maquette : la pastille, comme sur tous les écrans */}
+      {demo && <DemoPill className="relative" />}
+
       {/* Titre (plus petit à l'étape du code : le clavier prend la moitié de l'écran) */}
-      <header className={`relative text-center ${compact ? 'pt-1' : 'pt-10'}`}>
+      <header className={`relative text-center ${compact ? 'pt-1' : demo ? 'pt-5' : 'pt-10'}`}>
         <motion.h1
           className={`font-display leading-[0.95] font-bold tracking-tight text-ink ${compact ? 'text-[30px]' : 'text-[46px]'}`}
           initial={reduced ? false : { y: 20, opacity: 0 }}
@@ -216,7 +224,12 @@ export function LoginScreen() {
         )}
       </header>
 
-      {problem && <ProblemBanner text={problem} className="mt-5" />}
+      {problem && (
+        <ProblemBanner text={problem} detail={offlineHint(problem, backend.kind === 'supabase' ? backend.host : null)} className="mt-5" />
+      )}
+
+      {/* Maquette : on lève toute ambiguïté avant de choisir son prénom. */}
+      {demo && !picked && <DemoNotice demo={demo} />}
 
       {picked ? (
         <CodeStep
@@ -241,7 +254,7 @@ export function LoginScreen() {
       ) : (
         <>
           <motion.div
-            className="relative mt-7 text-center"
+            className={`relative text-center ${demo ? 'mt-5' : 'mt-7'}`}
             initial={reduced ? false : { opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ ...springy, delay: 0.35 }}
@@ -312,6 +325,58 @@ export function LoginScreen() {
         </>
       )}
     </div>
+  )
+}
+
+// ─── Maquette : la carte du haut ─────────────────────────────────────────────
+
+/** « Ceci est la maquette » : points inventés, n'importe quel code (et, en local, ce qui manque). */
+function DemoNotice({ demo }: { demo: DemoContext }) {
+  const reduced = useReducedMotion() ?? false
+  const { problems } = demo.diagnosis
+  const missing = [
+    ...(problems.includes('missingUrl') || problems.includes('invalidUrl') ? [URL_VAR] : []),
+    ...(problems.includes('missingKey') ? [KEY_VAR] : []),
+  ]
+  return (
+    <motion.section
+      role="note"
+      className="card relative mt-5 border-[3px] border-dashed px-4 py-3.5"
+      style={{ borderColor: tint('var(--color-gold)', 70, 'var(--color-line)'), background: tint('var(--color-gold)', 10) }}
+      initial={reduced ? false : { opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ ...springy, delay: 0.25 }}
+    >
+      <p className="flex gap-2.5 text-[15px] leading-snug font-semibold text-ink">
+        <span className="text-[26px] leading-none" aria-hidden="true">
+          🧪
+        </span>
+        <span className="min-w-0 flex-1">
+          <b className="font-display text-[17px]">{typo('Ceci est la maquette :')}</b>{' '}
+          {typo('les points, manches et badges sont inventés. N’importe quel code marche.')}
+        </span>
+      </p>
+      {demo.reason === 'dev' && missing.length > 0 && (
+        <p className="mt-2 border-t-2 border-dashed border-line pt-2 text-[14px] leading-snug font-semibold text-ink-soft">
+          {typo('💻 En local : il manque ')}
+          {missing.map((name, i) => (
+            <span key={name}>
+              {i > 0 && (i === missing.length - 1 ? ' et ' : ', ')}
+              <code className="font-mono text-[0.92em] font-bold [overflow-wrap:anywhere] text-ink">{name}</code>
+            </span>
+          ))}
+          {typo(' dans le fichier .env (modèle : .env.example).')}
+        </p>
+      )}
+      {demo.reason === 'asked' && (
+        <a
+          href={location.pathname}
+          className="mt-2.5 flex min-h-11 items-center justify-center gap-1.5 rounded-2xl bg-surface px-3.5 font-display text-[15px] font-semibold text-ink-soft shadow-[0_3px_0_var(--color-line)]"
+        >
+          🔌 Quitter la maquette
+        </a>
+      )}
+    </motion.section>
   )
 }
 
@@ -501,7 +566,7 @@ function StepDots({ current, total, color }: { current: number; total: number; c
 // ─── Bandeau « problème » ────────────────────────────────────────────────────
 
 /** Problème bloquant de la source (réseau, base pas prête) : texte en français prêt à afficher. */
-export function ProblemBanner({ text, className = '' }: { text: string; className?: string }) {
+export function ProblemBanner({ text, detail = null, className = '' }: { text: string; detail?: string | null; className?: string }) {
   const reduced = useReducedMotion() ?? false
   return (
     <motion.div
@@ -516,6 +581,7 @@ export function ProblemBanner({ text, className = '' }: { text: string; classNam
       transition={springy}
     >
       {text}
+      {detail && <span className="mt-1.5 block text-[14px] font-medium [overflow-wrap:anywhere] text-ink-soft">{detail}</span>}
     </motion.div>
   )
 }

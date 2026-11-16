@@ -8,8 +8,9 @@ import { dayKeyAt, hourAt } from '../core/dates'
 import { buildSeason, type Season } from '../core/season'
 import type { DayKey, DuelSnapshot, Player, PlayerId } from '../core/types'
 import { DemoSource } from './demo/DemoSource'
+import type { DemoReason, Diagnosis, RunMode } from './mode'
 import type { Activity, DemoControls, DuelSource } from './source'
-import { supabaseConfig } from './supabase/config'
+import { projectHost } from './supabase/config'
 import { createSupabaseSource } from './supabase/SupabaseSource'
 
 /** Commandes de la maquette, telles que les écrans les voient. */
@@ -17,7 +18,14 @@ export type DemoContext = DemoControls & {
   /** Ancien nom de signInAs (« Jouer en tant que »). */
   signIn(playerId: PlayerId): void
   readonly signedIn: boolean
+  /** Pourquoi la maquette : ?demo dans l'adresse, VITE_DEMO au build, ou dev sans .env. */
+  readonly reason: DemoReason
+  /** Ce qui manque pour brancher la vraie base (noms de variables seulement). */
+  readonly diagnosis: Diagnosis
 }
+
+/** La base utilisée, à afficher (jamais la clé : seulement l'hôte du projet, public). */
+export type Backend = { kind: 'supabase'; host: string } | { kind: 'demo'; reason: DemoReason }
 
 export interface DuelContextValue {
   source: DuelSource
@@ -34,6 +42,8 @@ export interface DuelContextValue {
   season: Season
   /** Commandes de la maquette (null avec une vraie source). */
   demo: DemoContext | null
+  /** Vraie base (et laquelle) ou maquette. */
+  backend: Backend
   /** Premier chargement en cours : afficher l'écran d'attente. */
   loading: boolean
   /** Problème bloquant (en français, prêt à afficher), ou null. */
@@ -45,22 +55,16 @@ export interface DuelContextValue {
 
 const DuelContext = createContext<DuelContextValue | null>(null)
 
-function currentSearch(): string {
-  try {
-    return typeof location === 'undefined' ? '' : location.search
-  } catch {
-    return ''
-  }
+/**
+ * La vraie base ou la maquette, selon le mode (src/data/mode.ts). « Pas branchée » n'arrive
+ * jamais ici : App affiche alors NotConnectedScreen sans monter DuelProvider.
+ */
+function createSource(mode: RunMode): DuelSource {
+  return mode.kind === 'supabase' ? createSupabaseSource(mode.config.url, mode.config.key) : new DemoSource()
 }
 
-/** La vraie base si les clés sont là (.env / Vercel) et pas ?demo ; sinon la maquette. */
-function createSource(): DuelSource {
-  const config = supabaseConfig(import.meta.env, currentSearch())
-  return config ? createSupabaseSource(config.url, config.key) : new DemoSource()
-}
-
-export function DuelProvider({ children }: { children: ReactNode }) {
-  const [source] = useState<DuelSource>(createSource)
+export function DuelProvider({ mode, children }: { mode: RunMode; children: ReactNode }) {
+  const [source] = useState<DuelSource>(() => createSource(mode))
 
   const [snapshot, setSnapshot] = useState<DuelSnapshot>(() => source.getSnapshot())
   const [now, setNow] = useState<Date>(() => source.now())
@@ -107,7 +111,7 @@ export function DuelProvider({ children }: { children: ReactNode }) {
   }, [signedIn, loading, me.id, snapshot, season, today, source])
 
   const demo = useMemo<DemoContext | null>(() => {
-    if (!(source instanceof DemoSource)) return null
+    if (!(source instanceof DemoSource) || mode.kind !== 'demo') return null
     const d = source
     return {
       signInAs: (id) => d.signInAs(id),
@@ -122,8 +126,15 @@ export function DuelProvider({ children }: { children: ReactNode }) {
       get signedIn() {
         return d.signedIn
       },
+      reason: mode.reason,
+      diagnosis: mode.diagnosis,
     }
-  }, [source])
+  }, [source, mode])
+
+  const backend = useMemo<Backend>(
+    () => (mode.kind === 'supabase' ? { kind: 'supabase', host: projectHost(mode.config.url) } : { kind: 'demo', reason: mode.reason }),
+    [mode],
+  )
 
   const value: DuelContextValue = {
     source,
@@ -136,6 +147,7 @@ export function DuelProvider({ children }: { children: ReactNode }) {
     playerById,
     season,
     demo,
+    backend,
     loading,
     problem,
     signedIn,

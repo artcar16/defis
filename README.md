@@ -74,13 +74,18 @@ Vous pourrez le changer ensuite dans l’app : *Réglages* › *Mon compte* › 
    | `VITE_SUPABASE_PUBLISHABLE_KEY` | la Publishable key |
 
 3. **Redéploie** : *Deployments* › le dernier déploiement › **⋯** › **Redeploy**. Les
-   variables sont lues au moment du build : sans redéploiement, l’app reste en maquette.
+   variables sont lues au moment du build : sans redéploiement, l’app affiche
+   *« L’app n’est pas encore branchée à ta base »* (voir *En cas de souci*).
+4. Vérifie : l’app montre ton écran de connexion, **sans** la pastille
+   *🧪 Maquette · données inventées*. Dans *Réglages*, tout en bas : *🔌 Branchée à
+   Supabase · xxxx.supabase.co* et la date de la version.
 
-L’URL, c’est juste `https://xxxx.supabase.co` : si tu as copié `…/rest/v1` à la fin, l’app
-l’enlève toute seule.
+L’URL, c’est juste `https://xxxx.supabase.co` (`.co`, pas `.com`) : si tu as copié
+`…/rest/v1` à la fin, ou oublié `https://` devant, l’app corrige toute seule.
 
 ⚠️ La clé publishable est publique par nature (elle finit dans l’app). Ne mets **jamais**
-la clé *secret* (`sb_secret_…`) ni *service_role*, ni dans Vercel ni dans le code.
+la clé *secret* (`sb_secret_…`) ni *service_role*, ni la chaîne de connexion de la base
+(`postgresql://…` avec le mot de passe), ni dans Vercel ni dans le code.
 
 ### 5. En local (facultatif)
 
@@ -128,23 +133,104 @@ le bon code. Depuis un téléphone déjà connecté : *Réglages* › *Mon compt
 prénom** (l’app dit combien de codes faux ont été tapés : si ce n’était pas vous, changez de
 code). Sinon, dans le SQL Editor : `delete from duel.code_failures where player_id = 'arthus';`
 
+### 🧹 Tout remettre à zéro
+
+> **Tu vois une « Manche 4 », ou des points que personne n’a marqués ?** Ce n’est pas ta
+> base : c’est la maquette (données inventées), et ta base est encore vide. Ce script n’y
+> changera rien : va d’abord à l’étape 4 (variables sur Vercel, puis **Redeploy**). En bas
+> des *Réglages*, tu dois lire *🔌 Branchée à Supabase · xxxx.supabase.co*.
+
+Pour repartir sur un duel tout propre : après des essais, ou pour changer la date de début.
+Pas besoin de relancer le gros script de l’étape 2.
+
+1. Ouvre le fichier [`supabase/remise-a-zero.sql`](supabase/remise-a-zero.sql) de ce dépôt
+   et copie **tout** son contenu (sur GitHub : bouton *Copy raw file*).
+2. Supabase › **SQL Editor** › **New query** : colle tout.
+3. Si besoin, change la date de début **dans l’éditeur de Supabase** : c’est la ligne qui
+   suit *« 🏁 DATE DE DÉBUT DU DUEL »* (vers la ligne 39, après les explications). Toujours
+   un **lundi**, cette semaine ou plus tard, écrit année-mois-jour entre les apostrophes. Par
+   exemple, pour commencer dès ce lundi 16 novembre :
+
+   ```sql
+   date_de_debut constant text := '2026-11-16';
+   ```
+
+   Sinon, laisse `'2026-11-23'` (le lundi 23 novembre 2026).
+4. **Run**. Si Supabase prévient que la requête efface des données, confirme : c’est le but.
+5. Résultat attendu : une ligne *« ✅ Tout est remis à zéro ! Le duel commence le lundi… »*,
+   avec le jour de la pesée de départ. Si un message d’erreur s’affiche à la place (une date
+   qui n’est pas un lundi, par exemple), **rien n’a été effacé** : recopie la date qu’il
+   propose (déjà au bon format, par exemple `2026-11-23`) et relance.
+
+| Effacé | Gardé |
+| --- | --- |
+| Check-ins, pesées (celle de départ aussi), poids objectifs | Laetitia et Arthus : prénom, emoji, couleur, « montrer mes kilos » |
+| Propositions (en attente comprises), manches, enjeux, gages payés | Vos codes et les téléphones déjà connectés : personne ne retape son code |
+| Badges, cérémonies déjà vues, codes faux | La liste des gages de la roulette 🎲 |
+
+Les habitudes reviennent à celles de départ (noms, emojis, ordre, types) et la pesée au
+dimanche. Les téléphones où l’app est ouverte se mettent à jour tout seuls, sans notification ;
+les autres, dès qu’on revient dans l’app. On peut relancer le script sans risque.
+
+Si vous commencez dès ce lundi, le dimanche d’avant est passé : la première pesée (dimanche
+prochain) sert de point de départ et ne rapporte de points à personne cette semaine-là.
+
+Ce script ne touche qu’à la base : si l’app montre la pastille *🧪 Maquette · données
+inventées* (sur les écrans comme sur les notifications), c’est la maquette, pas votre duel.
+Voir l’étape 4.
+
 ### Voir la maquette
 
 Ajoute `?demo` à l’adresse (ex. `https://ton-app.vercel.app/?demo`) : l’app tourne avec des
-données de démo (3 semaines fictives) et ne touche pas à la base. Sans les deux variables
-d’environnement, l’app démarre aussi en maquette.
+données de démo (3 semaines fictives) et ne touche pas à la base. Une pastille
+*🧪 Maquette · données inventées* est alors en haut de chaque écran, et *Réglages* › *Démo* ›
+**Quitter la maquette** ramène à la vraie app. En local sans `.env`, l’app démarre aussi en
+maquette ; sur le site déployé, jamais en douce : sans les variables, elle affiche
+*« pas encore branchée »*.
 
 ### En cas de souci
 
 - *« La base n’est pas prête »* : le script SQL n’a pas été lancé (étape 2).
 - *« Active Allow anonymous sign-ins »* : étape 3.
-- *« Impossible de joindre le serveur »* : pas de réseau, ou projet Supabase en pause
-  (l’offre gratuite se met en pause après une semaine sans activité) : *Restore project*
-  dans Supabase.
+- *« Impossible de joindre le serveur »* : pas de réseau, projet Supabase en pause
+  (l’offre gratuite se met en pause après une semaine sans activité : *Restore project*
+  dans Supabase), **ou adresse fausse** dans `VITE_SUPABASE_URL` sur Vercel. L’écran affiche
+  le *Serveur utilisé* : ce doit être ton Project URL, qui finit par `.supabase.co` (pas
+  `.com`). Corrige la variable, puis **Redeploy** (étape 4).
 - *« Clé Supabase refusée »* : la variable `VITE_SUPABASE_PUBLISHABLE_KEY` (ou l’URL) est
   fausse sur Vercel : recopie la **Publishable key** (`sb_publishable_…`, jamais la *secret*),
   puis **Redeploy** (étape 4).
 - *« Le serveur a répondu une erreur »* : relance le script SQL (étape 2), il ne casse rien.
-- L’app reste en maquette sur Vercel : variables mal nommées, ou pas de redéploiement (étape 4).
+- *« 🔌 L’app n’est pas encore branchée à ta base »* : le site déployé n’a pas reçu
+  l’URL ou la clé. L’écran dit laquelle manque (✅ / ❌, les noms seulement). Le plus
+  souvent : les variables ont été ajoutées **sans redéployer**, ou leur nom diffère un peu.
+  Vérifie les noms dans Vercel › *Settings* › *Environment Variables* (bouton *Copier le nom*
+  sur l’écran), puis *Deployments* › **⋯** › **Redeploy** (étape 4), et touche
+  **J’ai redéployé : recharger**. Si l’URL est *reçue mais pas la bonne*, l’écran dit ce qui
+  cloche (adresse de la base, du tableau de bord, `.com` au lieu de `.co`).
+  - L’app accepte aussi les noms que proposent Supabase (bouton *Connect*) et l’intégration
+    Supabase de Vercel. Pour l’URL : `VITE_SUPABASE_URL` ou `NEXT_PUBLIC_SUPABASE_URL`. Pour
+    la clé : `VITE_SUPABASE_PUBLISHABLE_KEY`, `VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY`,
+    `VITE_SUPABASE_ANON_KEY`, `VITE_SUPABASE_KEY`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`,
+    `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY` ou `NEXT_PUBLIC_SUPABASE_ANON_KEY` (s’il y
+    en a plusieurs, dans cet ordre). Rien d’autre n’est lu : `SUPABASE_SERVICE_ROLE_KEY`,
+    `POSTGRES_…` et les autres variables serveur de l’intégration restent hors de l’app.
+  - Pour savoir si le redéploiement a eu lieu : l’écran affiche *« Version du 16 novembre
+    à 14:32 »* (heure de Paris), qui change à chaque déploiement. On la retrouve ensuite en
+    bas des *Réglages*.
+- *« 🚨 Stop : c’est la clé secrète ! »* : la clé collée dans Vercel est la *secret*
+  (`sb_secret_…`) ou l’ancienne *service_role* (même entourée de guillemets, précédée de
+  « Bearer »…). Elle a été publiée dans l’app, donc **tout de suite** : supprime la variable
+  sur Vercel, régénère la clé secrète dans Supabase › *Project Settings* › *API Keys*, mets la
+  **Publishable key** à la place, puis **Redeploy**. L’app refuse de démarrer tant que cette
+  clé est là (même avec `?demo`).
+- *« 🚨 Stop : c’est le mot de passe de la base ! »* : `VITE_SUPABASE_URL` contient la chaîne
+  de connexion de la base (`postgresql://postgres:mot-de-passe@…`), publiée dans l’app.
+  **Tout de suite** : supprime la variable sur Vercel, change le mot de passe dans Supabase ›
+  *Project Settings* › *Database* › *Reset database password*, remets le **Project URL**
+  (`https://xxxx.supabase.co`) dans `VITE_SUPABASE_URL`, puis **Redeploy**.
+- Une pastille *🧪 Maquette · données inventées* en haut de l’écran (ou sous une
+  notification) : c’est la maquette (adresse avec `?demo`), pas votre duel. Enlève `?demo` de l’adresse, ou *Réglages* › *Démo* ›
+  **Quitter la maquette**.
 - Le *Security Advisor* de Supabase signale « RLS enabled, no policy » sur les tables du
   schéma `duel` : c’est voulu, l’app passe uniquement par les fonctions du serveur.

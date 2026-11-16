@@ -15,7 +15,16 @@ import { ProblemBanner } from './LoginScreen'
 /** Au-delà, on suggère de vérifier la connexion et on propose de réessayer (ms). */
 const SLOW_MS = 8000
 
-export function SplashScreen({ problem = null, onRetry }: { problem?: string | null; onRetry?: () => void }) {
+export function SplashScreen({
+  problem = null,
+  detail = null,
+  onRetry,
+}: {
+  problem?: string | null
+  /** Précision sous le problème (ex. le serveur utilisé quand il ne répond pas). */
+  detail?: string | null
+  onRetry?: () => void
+}) {
   const reduced = useReducedMotion() ?? false
   const [slow, setSlow] = useState(false)
 
@@ -59,7 +68,7 @@ export function SplashScreen({ problem = null, onRetry }: { problem?: string | n
       <h1 className="mt-6 font-display text-[40px] leading-[0.95] font-bold tracking-tight text-ink">Duel des Défauts</h1>
       <p className="mt-3 text-[17px] font-semibold text-ink-soft">On prépare le ring…</p>
       {problem ? (
-        <ProblemBanner text={problem} className="mt-5 w-full max-w-[22rem] text-left" />
+        <ProblemBanner text={problem} detail={detail} className="mt-5 w-full max-w-[22rem] text-left" />
       ) : (
         slow && (
           <motion.p

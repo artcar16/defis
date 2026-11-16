@@ -71,6 +71,18 @@ export const MESSAGES = {
   unknownHabit: typo('Habitude inconnue 🤔'),
 }
 
+/**
+ * Serveur injoignable au démarrage, sur la vraie base : l'adresse utilisée (l'hôte du projet,
+ * public), pour repérer une faute dans VITE_SUPABASE_URL (ref erronée…) au lieu d'accuser le
+ * wifi. null pour tout autre problème, ou sans hôte (maquette).
+ */
+export function offlineHint(problem: string | null, host: string | null): string | null {
+  if (problem !== MESSAGES.offline || !host) return null
+  return typo(
+    `Serveur utilisé : ${host}. Si ton réseau marche, vérifie cette adresse dans VITE_SUPABASE_URL sur Vercel (le Project URL, qui finit par .supabase.co), et que le projet Supabase n’est pas en pause.`,
+  )
+}
+
 /** Le code est-il bien formé ? (même règle que claim_player côté serveur) */
 export function isCodeFormatOk(code: string): boolean {
   return new RegExp(`^[0-9]{${CODE_LENGTH}}$`).test(code)
