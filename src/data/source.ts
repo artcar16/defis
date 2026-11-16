@@ -18,6 +18,9 @@
  * 6. Une seule proposition en attente par auteur et par sujet : proposer à nouveau
  *    (même `kind`, et même habitude pour habit_disable / habit_kind) remplace l'ancienne.
  *    Si RULES.proposals.requireApproval est faux, la proposition est acceptée d'office.
+ * 7. Connexion par prénom + code (décision 20 de SPEC.md) : pas d'email. Tant que
+ *    `loading` est vrai, `getSnapshot()` renvoie un snapshot de départ (joueurs et
+ *    réglages par défaut, aucune donnée) : les écrans affichent un écran d'attente.
  */
 import type {
   BadgeUnlock,
@@ -47,15 +50,42 @@ export interface Activity {
   text: string
 }
 
+/** Un joueur tel que l'écran de connexion le montre (avant d'être connecté). */
+export interface LoginPlayer {
+  id: PlayerId
+  name: string
+  emoji: string
+  color: string
+  /** Un code a déjà été choisi pour ce prénom (sinon : « Choisis ton code »). */
+  hasCode: boolean
+}
+
+/** Longueur du code secret (que des chiffres). */
+export const CODE_LENGTH = 6
+
 export type ProfilePatch = Partial<Pick<Player, 'name' | 'emoji' | 'color' | 'showKg'>>
 export type HabitLookPatch = Partial<Pick<Habit, 'name' | 'emoji' | 'hint'>>
 
 export interface DuelSource {
   readonly mode: 'demo' | 'supabase'
+  /** Premier chargement en cours (session, données) : afficher un écran d'attente. */
+  readonly loading: boolean
+  /**
+   * Problème bloquant, en français, prêt à afficher (ex. « La base n’est pas prête : lance
+   * le script SQL »). null si tout va bien. Notifié via subscribe.
+   */
+  readonly problem: string | null
   /** Le joueur est-il connecté ? (notifié via subscribe quand ça change) */
   readonly signedIn: boolean
-  /** Connexion email + mot de passe (rejette avec un message en français). */
-  signIn(email: string, password: string): Promise<void>
+  /** Les deux prénoms pour l'écran de connexion (rejette avec un message en français). */
+  loginPlayers(): Promise<LoginPlayer[]>
+  /**
+   * Connexion : prénom + code à CODE_LENGTH chiffres. Si ce prénom n'a pas encore de code,
+   * celui-ci devient le sien. Rejette avec un message en français (code faux, trop d'essais…).
+   */
+  signIn(playerId: PlayerId, code: string): Promise<void>
+  /** Change le code du joueur connecté (rejette avec un message en français si l'ancien est faux). */
+  changeCode(oldCode: string, newCode: string): Promise<void>
   /** Coupe tout (temps réel, minuteurs) : la source n'est plus utilisée. */
   dispose(): void
   /** Données actuelles (déjà filtrées pour le joueur connecté : kilos de l'autre masqués). */
@@ -90,6 +120,7 @@ export interface DuelSource {
   recordBadgeUnlocks(unlocks: BadgeUnlock[]): Promise<void>
   /** Ces célébrations de badges ont été vues par le joueur connecté. */
   markBadgesSeen(keys: string[]): Promise<void>
+  /** « Se déconnecter » : ce téléphone oublie le joueur (il faudra retaper le code). */
   signOut(): Promise<void>
 }
 

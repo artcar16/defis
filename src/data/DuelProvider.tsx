@@ -32,6 +32,10 @@ export interface DuelContextValue {
   season: Season
   /** Commandes de la maquette (null avec une vraie source). */
   demo: DemoContext | null
+  /** Premier chargement en cours : afficher l'écran d'attente. */
+  loading: boolean
+  /** Problème bloquant (en français, prêt à afficher), ou null. */
+  problem: string | null
   signedIn: boolean
   /** Dernière activité reçue (pour les toasts / animations). */
   lastActivity: (Activity & { at: number }) | null
@@ -51,12 +55,16 @@ export function DuelProvider({ children }: { children: ReactNode }) {
   const [now, setNow] = useState<Date>(() => source.now())
   const [lastActivity, setLastActivity] = useState<DuelContextValue['lastActivity']>(null)
   const [signedIn, setSignedIn] = useState<boolean>(() => source.signedIn)
+  const [loading, setLoading] = useState<boolean>(() => source.loading)
+  const [problem, setProblem] = useState<string | null>(() => source.problem)
 
   useEffect(() => {
     const unsubscribe = source.subscribe((snap, activity) => {
       setSnapshot(snap)
       setNow(source.now())
       setSignedIn(source.signedIn)
+      setLoading(source.loading)
+      setProblem(source.problem)
       if (activity) setLastActivity({ ...activity, at: Date.now() })
     })
     if (source instanceof DemoSource) source.scheduleOtherCheckin()
@@ -116,6 +124,8 @@ export function DuelProvider({ children }: { children: ReactNode }) {
     playerById,
     season,
     demo,
+    loading,
+    problem,
     signedIn,
     lastActivity,
   }

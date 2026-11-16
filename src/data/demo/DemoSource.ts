@@ -20,7 +20,7 @@ import type {
   ProposalPayload,
 } from '../../core/types'
 import { deriveWeighIns } from '../../core/weight'
-import type { Activity, DemoControls, DuelSource, HabitLookPatch, ProfilePatch } from '../source'
+import { CODE_LENGTH, type Activity, type DemoControls, type DuelSource, type HabitLookPatch, type LoginPlayer, type ProfilePatch } from '../source'
 import {
   DEMO_VERSION,
   demoTravelDays,
@@ -85,6 +85,11 @@ function uid(): string {
   }
 }
 
+/** Même règle de format que le serveur (claim_player) : exactement CODE_LENGTH chiffres. */
+function checkCodeFormat(code: string) {
+  if (!new RegExp(`^[0-9]{${CODE_LENGTH}}$`).test(code)) throw new Error(typo(`Le code, c’est ${CODE_LENGTH} chiffres 🔢`))
+}
+
 /** Même sujet = la nouvelle proposition remplace l'ancienne (garantie 6 de source.ts). */
 function sameSubject(a: ProposalPayload, b: ProposalPayload): boolean {
   if (a.kind !== b.kind) return false
@@ -110,6 +115,9 @@ export interface DemoSourceOptions {
 
 export class DemoSource implements DuelSource, DemoControls {
   readonly mode = 'demo' as const
+  /** Tout est en mémoire : jamais d'attente ni de problème de serveur. */
+  readonly loading = false
+  readonly problem = null
   private state: DemoState
   private listeners = new Set<Listener>()
   private snapshot: DuelSnapshot
@@ -175,11 +183,21 @@ export class DemoSource implements DuelSource, DemoControls {
     return this.state.signedIn
   }
 
-  /** Pas de vrais comptes dans la maquette : on choisit son joueur avec « Jouer en tant que ». */
-  async signIn(_email: string, _password: string): Promise<void> {
-    throw new Error(
-      typo('🧪 C’est la maquette : pas encore de vrais comptes. Choisis ton joueur avec les boutons « Jouer en tant que » 👆'),
-    )
+  /** En maquette, les deux prénoms ont déjà un code (n'importe quel code à 6 chiffres marche). */
+  async loginPlayers(): Promise<LoginPlayer[]> {
+    return this.state.players.map((p) => ({ id: p.id, name: p.name, emoji: p.emoji, color: p.color, hasCode: true }))
+  }
+
+  /** Comme le vrai serveur, refuse un code mal formé ; sinon n'importe quel code ouvre la maquette. */
+  async signIn(playerId: PlayerId, code: string): Promise<void> {
+    checkCodeFormat(code)
+    if (!this.state.players.some((p) => p.id === playerId)) throw new Error('Joueur inconnu 🤔')
+    this.signInAs(playerId)
+  }
+
+  async changeCode(oldCode: string, newCode: string): Promise<void> {
+    checkCodeFormat(oldCode)
+    checkCodeFormat(newCode)
   }
 
   /** Coupe les minuteurs et les abonnés. La démo reste utilisable (React StrictMode remonte le Provider). */

@@ -160,8 +160,8 @@ Une app web installable (**PWA**) : on l'ajoute à l'écran d'accueil, sur iPhon
 
 - **Front** : Vite, React, TypeScript, Tailwind CSS, vite-plugin-pwa.
 - **Données, connexion et temps réel** : Supabase (offre gratuite).
-- **Connexion** par email et mot de passe : deux comptes, chacun lié à son joueur, session mémorisée. Pas de lien magique (sur iPhone, il s'ouvrirait dans Safari et pas dans l'app installée).
-- **Sécurité** (Row Level Security) : seuls nos deux comptes accèdent aux données, et chacun ne modifie que ses propres check-ins et pesées.
+- **Connexion** par prénom + code secret (décision 20) : pas d'email ni de compte à créer. La première fois sur un téléphone, on touche son prénom et on tape son code ; le téléphone s'en souvient ensuite.
+- **Sécurité** : seuls les téléphones qui ont donné le bon code accèdent aux données, et chacun ne modifie que ses propres check-ins et pesées. Les tables ne sont pas accessibles directement (Row Level Security sans aucune règle d'accès) : l'app passe uniquement par des fonctions du serveur qui vérifient qui joue, appliquent les règles et masquent les kilos de l'autre.
 - **Hébergement** : Vercel (gratuit), déployé depuis un repo GitHub.
 - **Librairies** : Motion (ex-Framer Motion) pour les animations, canvas-confetti, Recharts pour les graphiques, date-fns avec le fuseau Europe/Paris.
 - **Modèle de données indicatif** : `players`, `habits`, `checkins` (un seul par joueur, habitude et jour), `weigh_ins`, `weeks` (enjeu, gage payé). Les badges peuvent être calculés.
@@ -208,6 +208,7 @@ _Points tranchés pendant le projet. Ils complètent (et priment sur) les sectio
 2. **Les changements de règles se valident à deux** : ajouter une habitude, la désactiver ou changer son type est une *proposition* que l'autre accepte ou refuse d'un tap. Acceptée, elle s'applique le lundi suivant. Renommer une habitude ou changer son emoji reste libre et immédiat (c'est cosmétique).
 3. **Pesée le jour J uniquement** : on ne peut se peser que le jour de la pesée, et corriger jusqu'à 23:59 ce jour-là. Pas de pesée = 0 pt ; la suivante se compare à la dernière pesée existante. La pesée de départ suit la même règle.
 4. **Enjeu de la semaine** : chaque lundi, la roulette 🎲 tire automatiquement un gage dans la liste. Chacun peut le remplacer (texte libre ou nouveau tirage) jusqu'au lundi 23:59 ; ensuite il est verrouillé jusqu'à la fin de la manche.
+20. **Pas de comptes : prénom + code** : la première fois sur un téléphone, on touche son prénom et on tape un code à 6 chiffres (le tout premier code tapé pour un prénom devient le sien). Le téléphone reste connecté ensuite. Le code se change dans les Réglages ; « Se déconnecter » oublie ce téléphone. Après 10 codes faux en 15 minutes sur un prénom, il faut attendre (contre les petits malins).
 
 ### Précisions ajoutées par Claude (à contester si besoin)
 
@@ -225,7 +226,7 @@ _Points tranchés pendant le projet. Ils complètent (et priment sur) les sectio
 16. **Badges gravés** : un badge (ou un palier 🪶) est enregistré dès qu'il est débloqué. Si une correction encore permise (aujourd'hui, hier, pesée du jour) repasse ensuite sous le seuil, il reste débloqué. Les célébrations déjà vues sont enregistrées par joueur (elles ne se rejouent pas sur un autre téléphone).
 17. **Une proposition à la fois par sujet** : refaire une proposition sur le même sujet (objectif, jour de pesée, type ou désactivation d'une même habitude) remplace celle en attente.
 18. **Objectif de poids privé** : l'autre ne voit jamais le poids objectif en kg, seulement le % depuis le départ, y compris dans les propositions (sauf si on a choisi de montrer ses kilos).
-19. **Tirage automatique** : le gage du lundi est tiré au sort de façon déterministe (même liste + même lundi = même gage), pour que les deux téléphones tirent le même sans se concerter.
+19. **Tirage automatique** : le gage du lundi est tiré au sort de façon déterministe (même liste + même lundi = même gage), pour que les deux téléphones tirent le même sans se concerter. Jamais deux fois le même gage d'affilée quand la liste en propose d'autres.
 
 ## Journal des modifications
 
@@ -234,3 +235,4 @@ _Points tranchés pendant le projet. Ils complètent (et priment sur) les sectio
 | 2026-11-16 | Création du cahier des charges. |
 | 2026-11-16 | Décisions 1 à 4 validées (fin de manche, changements de règles à deux, pesée le jour J, enjeu verrouillé le lundi soir) ; précisions 5 à 15. |
 | 2026-11-16 | Maquette relue (règles, rendu iPhone, textes, parcours, confidentialité) ; précisions 16 à 19. |
+| 2026-11-16 | Décision 20 : connexion par prénom + code au lieu de comptes email. Sécurité : accès aux données uniquement par des fonctions du serveur. |

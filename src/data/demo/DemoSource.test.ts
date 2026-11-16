@@ -196,13 +196,20 @@ describe('DemoSource · badges', () => {
 })
 
 describe('DemoSource · connexion et minuteurs', () => {
-  it('signIn(email, mot de passe) renvoie aux boutons « Jouer en tant que »', async () => {
+  it('signIn(prénom, code) : refuse un code mal formé, accepte n’importe quels 6 chiffres', async () => {
     const src = make('?reset=1')
     expect(src.signedIn).toBe(false)
-    await expect(src.signIn('arthus@example.com', 'secret')).rejects.toThrow(/Jouer en tant que/)
-    src.signInAs('laetitia')
+    expect((await src.loginPlayers()).map((p) => [p.id, p.hasCode])).toEqual([
+      ['laetitia', true],
+      ['arthus', true],
+    ])
+    await expect(src.signIn('laetitia', '12a4')).rejects.toThrow(/6\u00a0?chiffres|6 chiffres/)
+    expect(src.signedIn).toBe(false)
+    await src.signIn('laetitia', '123456')
     expect(src.signedIn).toBe(true)
     expect(src.getSnapshot().meId).toBe('laetitia')
+    await expect(src.changeCode('123456', '12')).rejects.toThrow()
+    await expect(src.changeCode('123456', '654321')).resolves.toBeUndefined()
   })
 
   it('signOut coupe les minuteurs : ni check-in simulé, ni réponse automatique après la déconnexion', async () => {
