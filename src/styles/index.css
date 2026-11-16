@@ -1,0 +1,184 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/fredoka';
+@import '@fontsource-variable/nunito';
+
+/*
+ * 🎨 Thème « jeu mobile ». Toutes les couleurs passent par ces jetons :
+ * utiliser bg-bg, bg-surface, text-ink, text-muted, border-line… (jamais de couleur en dur,
+ * sauf les couleurs des joueurs, qui sont dynamiques : var(--me), var(--other), var(--pc)).
+ */
+@theme {
+  --font-display: 'Fredoka Variable', ui-rounded, 'SF Pro Rounded', system-ui, sans-serif;
+  --font-body: 'Nunito Variable', ui-rounded, 'SF Pro Rounded', system-ui, sans-serif;
+
+  --color-bg: #fff4e6;
+  --color-bg-2: #ffe9d2;
+  --color-surface: #ffffff;
+  --color-sunken: #fff0e0;
+  --color-ink: #2b1d3f;
+  --color-ink-soft: #4a3a5f;
+  --color-muted: #8c7ba0;
+  --color-line: #f1dcc6;
+
+  --color-nickel: #22c55e;
+  --color-unpeu: #ffa62b;
+  --color-craquage: #ff4d5e;
+  --color-gold: #ffc23d;
+  --color-gold-dark: #e09a00;
+  --color-coral: #ff6f61;
+  --color-electric: #2e6bff;
+
+  --radius-card: 1.75rem;
+  --radius-btn: 1.25rem;
+
+  --shadow-card: 0 10px 30px -14px rgb(43 29 63 / 0.28), 0 2px 0 rgb(43 29 63 / 0.04);
+  --shadow-pop: 0 18px 40px -12px rgb(43 29 63 / 0.35);
+
+  --animate-wiggle: wiggle 0.6s ease-in-out;
+  --animate-float: float 3s ease-in-out infinite;
+}
+
+@keyframes wiggle {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-8deg); }
+  75% { transform: rotate(8deg); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #1a1230;
+    --color-bg-2: #221840;
+    --color-surface: #2a2047;
+    --color-sunken: #221a3c;
+    --color-ink: #f7f1ff;
+    --color-ink-soft: #ddd0f0;
+    --color-muted: #a99bc2;
+    --color-line: #3d3163;
+    --shadow-card: 0 10px 30px -14px rgb(0 0 0 / 0.6), 0 2px 0 rgb(0 0 0 / 0.15);
+    --shadow-pop: 0 18px 40px -12px rgb(0 0 0 / 0.7);
+  }
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+    background: var(--color-bg);
+    color-scheme: light dark;
+  }
+  body {
+    margin: 0;
+    min-height: 100dvh;
+    background: var(--color-bg);
+    color: var(--color-ink);
+    font-family: var(--font-body);
+    overscroll-behavior-y: none;
+    -webkit-font-smoothing: antialiased;
+  }
+  button {
+    cursor: pointer;
+    touch-action: manipulation;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  input,
+  textarea,
+  select {
+    font: inherit;
+    /* 16px minimum : sinon iOS zoome au focus. */
+    font-size: max(16px, 1em);
+  }
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+  }
+}
+
+@layer components {
+  /* Fond de page légèrement texturé (pois). */
+  .app-bg {
+    background-color: var(--color-bg);
+    background-image: radial-gradient(color-mix(in oklab, var(--color-ink) 5%, transparent) 1.2px, transparent 1.3px);
+    background-size: 22px 22px;
+  }
+
+  /* Carte arrondie standard. */
+  .card {
+    background: var(--color-surface);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-card);
+  }
+
+  /*
+   * Bouton « chunky » façon jeu mobile : bord inférieur plus foncé qui s'écrase au tap.
+   * Couleur via --btn (par défaut la couleur du joueur connecté).
+   */
+  .btn-chunky {
+    --btn: var(--me, var(--color-coral));
+    --btn-ink: #fff;
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    border-radius: var(--radius-btn);
+    background: var(--btn);
+    color: var(--btn-ink);
+    font-family: var(--font-display);
+    font-weight: 600;
+    box-shadow: 0 5px 0 color-mix(in oklab, var(--btn) 70%, black), 0 10px 20px -8px color-mix(in oklab, var(--btn) 60%, transparent);
+    transition: transform 0.08s ease, box-shadow 0.08s ease, filter 0.2s;
+  }
+  .btn-chunky:active:not(:disabled) {
+    transform: translateY(4px);
+    box-shadow: 0 1px 0 color-mix(in oklab, var(--btn) 70%, black), 0 4px 10px -6px color-mix(in oklab, var(--btn) 60%, transparent);
+  }
+  .btn-chunky:disabled {
+    filter: grayscale(0.8) opacity(0.55);
+    cursor: not-allowed;
+  }
+  /* Variante neutre (fond carte). */
+  .btn-soft {
+    --btn: var(--color-surface);
+    --btn-ink: var(--color-ink);
+    box-shadow: 0 5px 0 var(--color-line), 0 10px 20px -10px rgb(43 29 63 / 0.25);
+  }
+  .btn-soft:active:not(:disabled) {
+    box-shadow: 0 1px 0 var(--color-line);
+  }
+
+  /* Gros emoji « illustration ». */
+  .emoji-xl {
+    font-size: 3.5rem;
+    line-height: 1;
+    filter: drop-shadow(0 6px 8px rgb(43 29 63 / 0.18));
+  }
+
+  /* Chiffres de score : police ronde, chiffres à largeur fixe. */
+  .score-num {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.02em;
+  }
+
+  /* Marges de sécurité iPhone (encoche + barre du bas). */
+  .safe-top {
+    padding-top: max(env(safe-area-inset-top), 12px);
+  }
+  .safe-bottom {
+    padding-bottom: max(env(safe-area-inset-bottom), 12px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
