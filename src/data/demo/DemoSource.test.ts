@@ -6,6 +6,7 @@ import { drawStake } from '../../core/stake'
 import type { DuelSnapshot, ProposalPayload } from '../../core/types'
 import type { Activity } from '../source'
 import { DemoSource } from './DemoSource'
+import type { DemoState } from './generate'
 
 /** Horloge fixe : le lundi 16 novembre 2026, midi à Paris. */
 const clock = () => new Date('2026-11-16T11:00:00Z')
@@ -149,6 +150,26 @@ describe('DemoSource · propositions', () => {
       { kind: 'habit_add', name: 'Sommeil', emoji: '😴', hint: '', habitKind: 'do' },
     ])
     expect(src.getSnapshot().proposals.filter((p) => p.status === 'cancelled')).toHaveLength(2)
+  })
+
+  it('désactiver ou changer le type d’une même habitude : un seul sujet ; accepter sur une habitude close est refusé (R1)', async () => {
+    const src = make('?reset=1&as=arthus')
+    await src.propose({ kind: 'habit_kind', habitId: 'arthus-ongles', habitKind: 'do' })
+    await src.propose({ kind: 'habit_disable', habitId: 'arthus-ongles' })
+    const mine = src.getSnapshot().proposals.filter((p) => p.authorId === 'arthus')
+    expect(mine.map((p) => [p.payload.kind, p.status])).toEqual([
+      ['habit_kind', 'cancelled'],
+      ['habit_disable', 'pending'],
+    ])
+    // L'habitude a été close entre-temps (autre proposition acceptée) : on ne la rouvre pas.
+    const state = (src as unknown as { state: DemoState }).state
+    state.habits = state.habits.map((h) => (h.id === 'arthus-ongles' ? { ...h, activeUntil: '2026-11-23' } : h))
+    src.switchPlayer('laetitia')
+    await expect(src.answerProposal(mine[1].id, true)).rejects.toThrow('Cette habitude est déjà désactivée 🤷')
+    expect(src.getSnapshot().habits.find((h) => h.id === 'arthus-ongles')?.activeUntil).toBe('2026-11-23')
+    await src.answerProposal(mine[1].id, false)
+    expect(src.getSnapshot().proposals.find((p) => p.id === mine[1].id)?.status).toBe('refused')
+    src.dispose()
   })
 
   it('sans approbation requise (RULES.proposals.requireApproval = false), la proposition est acceptée d’office', async () => {

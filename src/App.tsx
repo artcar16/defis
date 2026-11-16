@@ -1,5 +1,6 @@
 /**
- * Coque de l'app : onglets, feuilles (pesée, résultats), toasts temps réel.
+ * Coque de l'app : écran d'attente (premier chargement), connexion, puis onglets,
+ * feuilles (pesée, résultats) et toasts temps réel.
  */
 import { AnimatePresence, PresenceContext, motion } from 'motion/react'
 import { useEffect, useRef, type CSSProperties } from 'react'
@@ -7,10 +8,11 @@ import { pendingResultsWeek } from './core/season'
 import { DuelProvider, useDuel } from './data/DuelProvider'
 import { BadgesScreen } from './screens/BadgesScreen'
 import { CheckinScreen } from './screens/CheckinScreen'
-import { LoginScreen } from './screens/LoginScreen'
+import { LoginScreen, ProblemBanner } from './screens/LoginScreen'
 import { ResultsSheet } from './screens/ResultsSheet'
 import { RingScreen } from './screens/RingScreen'
 import { SettingsScreen } from './screens/SettingsScreen'
+import { SplashScreen } from './screens/SplashScreen'
 import { StatsScreen } from './screens/StatsScreen'
 import { WeighInSheet } from './screens/WeighInSheet'
 import { onColor } from './ui/color'
@@ -41,7 +43,7 @@ function playerVars(meColor: string, otherColor: string): Record<string, string>
 }
 
 function Shell() {
-  const { me, other, signedIn, season, snapshot, lastActivity, playerById } = useDuel()
+  const { me, other, signedIn, loading, problem, season, snapshot, lastActivity, playerById, source } = useDuel()
   const { tab, setTab, sheet, openSheet, closeSheet } = useNav()
   const toast = useToast()
 
@@ -57,7 +59,8 @@ function Shell() {
   // La cérémonie des résultats s'ouvre toute seule à la première visite après la fin de la manche.
   // ResultsSheet la marque « vue » ; en attendant (écriture lente, hors ligne), on retient ici
   // les manches déjà ouvertes pour ne pas la rouvrir en boucle quand on la ferme.
-  const pendingWeek = signedIn ? (pendingResultsWeek(season, snapshot.seenResults)?.weekStart ?? null) : null
+  // Rien pendant le premier chargement : le snapshot de départ est vide.
+  const pendingWeek = signedIn && !loading ? (pendingResultsWeek(season, snapshot.seenResults)?.weekStart ?? null) : null
   const autoOpened = useRef(new Set<string>())
   useEffect(() => {
     // Vue et confirmée par la source : on oublie (« Revoir la cérémonie » de la démo la rouvre).
@@ -83,9 +86,20 @@ function Shell() {
     for (const [name, value] of Object.entries(playerVars(me.color, other.color))) root.setProperty(name, value)
   }, [me.color, other.color])
 
+  // Premier chargement (session, données) : écran d'attente, puis connexion ou Ring. Un
+  // téléphone déjà connecté qui ne joint pas le serveur y reste, avec le problème et
+  // « Réessayer » : il ne redemande pas le code.
+  if (loading) {
+    return (
+      <div className="app-bg min-h-dvh text-ink" style={vars}>
+        <SplashScreen problem={problem} onRetry={() => source.retry()} />
+      </div>
+    )
+  }
+
   if (!signedIn) {
     return (
-      <div className="app-bg min-h-dvh" style={vars}>
+      <div className="app-bg min-h-dvh text-ink" style={vars}>
         <LoginScreen />
       </div>
     )
@@ -95,6 +109,8 @@ function Shell() {
   return (
     <div className="app-bg min-h-dvh text-ink" style={vars}>
       <main className="safe-top mx-auto max-w-md px-4 pb-[calc(env(safe-area-inset-bottom)+112px)]">
+        {/* Connecté mais bloqué (base pas à jour…) : on le dit, les données restent affichées. */}
+        {problem && <ProblemBanner text={problem} className="mt-2 mb-2" />}
         <AnimatePresence mode="wait" initial={false}>
           <motion.div
             key={tab}

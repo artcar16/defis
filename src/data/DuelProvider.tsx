@@ -9,6 +9,8 @@ import { buildSeason, type Season } from '../core/season'
 import type { DayKey, DuelSnapshot, Player, PlayerId } from '../core/types'
 import { DemoSource } from './demo/DemoSource'
 import type { Activity, DemoControls, DuelSource } from './source'
+import { supabaseConfig } from './supabase/config'
+import { createSupabaseSource } from './supabase/SupabaseSource'
 
 /** Commandes de la maquette, telles que les écrans les voient. */
 export type DemoContext = DemoControls & {
@@ -43,9 +45,18 @@ export interface DuelContextValue {
 
 const DuelContext = createContext<DuelContextValue | null>(null)
 
+function currentSearch(): string {
+  try {
+    return typeof location === 'undefined' ? '' : location.search
+  } catch {
+    return ''
+  }
+}
+
+/** La vraie base si les clés sont là (.env / Vercel) et pas ?demo ; sinon la maquette. */
 function createSource(): DuelSource {
-  // Étape 5 : choisir SupabaseSource quand les clés sont présentes (et pas ?demo).
-  return new DemoSource()
+  const config = supabaseConfig(import.meta.env, currentSearch())
+  return config ? createSupabaseSource(config.url, config.key) : new DemoSource()
 }
 
 export function DuelProvider({ children }: { children: ReactNode }) {
@@ -89,10 +100,11 @@ export function DuelProvider({ children }: { children: ReactNode }) {
   // par la source, pour ne plus le perdre après une correction. Pas de boucle : une fois
   // enregistré, badgeUnlocksToRecord ne le renvoie plus.
   useEffect(() => {
-    if (!signedIn) return
+    // Rien tant que le premier chargement n'est pas fini (snapshot de départ, vide).
+    if (!signedIn || loading) return
     const todo = badgeUnlocksToRecord(me.id, computeBadges(me.id, snapshot, season, today), snapshot.badgeUnlocks)
     if (todo.length > 0) source.recordBadgeUnlocks(todo).catch(() => {})
-  }, [signedIn, me.id, snapshot, season, today, source])
+  }, [signedIn, loading, me.id, snapshot, season, today, source])
 
   const demo = useMemo<DemoContext | null>(() => {
     if (!(source instanceof DemoSource)) return null

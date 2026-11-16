@@ -20,6 +20,8 @@ import type {
   ProposalPayload,
 } from '../../core/types'
 import { deriveWeighIns } from '../../core/weight'
+import { makeActivity } from '../activity'
+import { maskWeighIn, pctHalf } from '../mask'
 import { CODE_LENGTH, type Activity, type DemoControls, type DuelSource, type HabitLookPatch, type LoginPlayer, type ProfilePatch } from '../source'
 import {
   DEMO_VERSION,
@@ -35,9 +37,6 @@ import {
 const STORAGE_KEY = 'duel-demo-v1'
 /** Anciennes clés des badges déjà fêtés (avant qu'ils passent dans l'état) : effacées au reset. */
 const LEGACY_BADGES_SEEN_PREFIX = 'duel-badges-seen-'
-
-/** « check‑in » avec un trait d'union insécable : jamais coupé en fin de ligne. */
-const CHECKIN = 'check‑in'
 
 function storage(): Storage | null {
   try {
@@ -90,12 +89,19 @@ function checkCodeFormat(code: string) {
   if (!new RegExp(`^[0-9]{${CODE_LENGTH}}$`).test(code)) throw new Error(typo(`Le code, c’est ${CODE_LENGTH} chiffres 🔢`))
 }
 
+/** L'habitude visée par une proposition de désactivation ou de changement de type. */
+function habitOfProposal(p: ProposalPayload): string | null {
+  return p.kind === 'habit_disable' || p.kind === 'habit_kind' ? p.habitId : null
+}
+
 /** Même sujet = la nouvelle proposition remplace l'ancienne (garantie 6 de source.ts). */
 function sameSubject(a: ProposalPayload, b: ProposalPayload): boolean {
+  // Désactiver une habitude ou changer son type : UN seul sujet par habitude. Sinon la
+  // seconde, acceptée plus tard, rouvrirait une habitude déjà close (comme le serveur).
+  const habitA = habitOfProposal(a)
+  const habitB = habitOfProposal(b)
+  if (habitA !== null || habitB !== null) return habitA === habitB
   if (a.kind !== b.kind) return false
-  if ((a.kind === 'habit_disable' || a.kind === 'habit_kind') && (b.kind === 'habit_disable' || b.kind === 'habit_kind')) {
-    return a.habitId === b.habitId
-  }
   // Deux nouvelles habitudes différentes ne se remplacent pas (même nom = même sujet).
   if (a.kind === 'habit_add' && b.kind === 'habit_add') return a.name.trim().toLowerCase() === b.name.trim().toLowerCase()
   return true
@@ -200,6 +206,14 @@ export class DemoSource implements DuelSource, DemoControls {
     checkCodeFormat(newCode)
   }
 
+  /** Maquette : personne ne tape de faux codes. */
+  async unlockCode(): Promise<number> {
+    return 0
+  }
+
+  /** Maquette : rien à réessayer (tout est en mémoire). */
+  retry(): void {}
+
   /** Coupe les minuteurs et les abonnés. La démo reste utilisable (React StrictMode remonte le Provider). */
   dispose(): void {
     this.clearTimers()
@@ -222,19 +236,25 @@ export class DemoSource implements DuelSource, DemoControls {
     return this.state.goals.filter((g) => g.playerId === playerId && g.from <= day).sort((a, b) => (a.from < b.from ? -1 : 1)).at(-1)?.kg ?? null
   }
 
-  /** Le snapshot du joueur connecté : copie profonde, kilos de l'autre masqués (garantie 3). */
+  /**
+   * Le snapshot du joueur connecté : copie profonde, kilos de l'autre masqués et ses %
+   * arrondis comme le fait le serveur (garantie 3, ../mask.ts).
+   */
   private buildSnapshot(): DuelSnapshot {
     const s = this.state
     const reveal = (pid: PlayerId) => pid === s.meId || !!s.players.find((p) => p.id === pid)?.showKg
-    const weighIns = deriveWeighIns(s.weighIns, (pid, day) => this.goalAt(pid, day), reveal)
+    const weighIns = deriveWeighIns(s.weighIns, (pid, day) => this.goalAt(pid, day), reveal).map((w) =>
+      reveal(w.playerId) ? w : maskWeighIn(w),
+    )
     const players = s.players.map(({ key: _key, ...p }) => {
       const first = s.weighIns.filter((w) => w.playerId === p.id).sort((a, b) => (a.day < b.day ? -1 : 1))[0]
       // Objectif en vigueur aujourd'hui (le dernier, même s'il démarre lundi prochain, est montré à part).
       const goal = this.goalAt(p.id, this.state.today)
+      const pct = goal && first ? percentChange(first.weightKg, goal) : null
       return {
         ...p,
         goalKg: reveal(p.id) ? goal : null,
-        goalFromStartPct: goal && first ? percentChange(first.weightKg, goal) : null,
+        goalFromStartPct: pct !== null && !reveal(p.id) ? pctHalf(pct) : pct,
       }
     })
     return {
@@ -393,7 +413,7 @@ export class DemoSource implements DuelSource, DemoControls {
       // Déconnecté, ou on a changé de joueur entre-temps (c'est à « moi » de répondre) : pas de réponse automatique.
       if (!p || p.status !== 'pending' || !this.state.signedIn || this.state.meId !== p.authorId) return
       this.decide(p, true)
-      this.commit({ kind: 'proposal_accepted', playerId: other, text: `✅ ${this.nameOf(other)} a accepté ta proposition (effet lundi)` })
+      this.commit(makeActivity('proposal_accepted', other, this.nameOf(other)))
     })
   }
 
@@ -420,10 +440,12 @@ export class DemoSource implements DuelSource, DemoControls {
         sortOrder: order,
       })
     } else if (pl.kind === 'habit_disable') {
-      this.state.habits = this.state.habits.map((h) => (h.id === pl.habitId ? { ...h, activeUntil: from } : h))
+      // Jamais une habitude déjà close (ce serait la rouvrir ou déplacer sa fin).
+      this.state.habits = this.state.habits.map((h) => (h.id === pl.habitId && h.activeUntil === null ? { ...h, activeUntil: from } : h))
     } else if (pl.kind === 'habit_kind') {
       // On clôt l'ancienne habitude et on en crée une nouvelle : l'historique garde son type.
-      const old = this.state.habits.find((h) => h.id === pl.habitId)
+      // Rien si elle est déjà close.
+      const old = this.state.habits.find((h) => h.id === pl.habitId && h.activeUntil === null)
       if (!old) return
       this.state.habits = this.state.habits.map((h) => (h.id === old.id ? { ...h, activeUntil: from } : h))
       const fresh: Habit = { ...old, id: uid(), kind: pl.habitKind, badgeKey: null, activeFrom: from, activeUntil: null }
@@ -441,6 +463,11 @@ export class DemoSource implements DuelSource, DemoControls {
   async answerProposal(proposalId: string, accept: boolean): Promise<void> {
     const p = this.state.proposals.find((x) => x.id === proposalId)
     if (!p || p.status !== 'pending' || p.authorId === this.state.meId) return
+    // Habitude déjà close entre-temps : on ne la rouvre pas (comme le serveur).
+    const habitId = habitOfProposal(p.payload)
+    if (accept && habitId !== null && this.state.habits.some((h) => h.id === habitId && h.activeUntil !== null)) {
+      throw new Error('Cette habitude est déjà désactivée 🤷')
+    }
     this.decide(p, accept)
     this.commit()
   }
@@ -462,7 +489,11 @@ export class DemoSource implements DuelSource, DemoControls {
   }
 
   async setGages(gages: string[]): Promise<void> {
-    this.state.settings.gages = [...gages]
+    // Mêmes garde-fous que le serveur (set_gages) : vides retirés, au moins 1, 200 au plus.
+    const list = gages.map((g) => g.trim()).filter(Boolean)
+    if (list.length < 1) throw new Error('Il faut au moins un gage pour la roulette 🎲')
+    if (list.length > 200) throw new Error(typo('200 gages maximum, c’est déjà une sacrée roulette 🎲'))
+    this.state.settings.gages = list
     this.commit()
   }
 
@@ -544,7 +575,7 @@ export class DemoSource implements DuelSource, DemoControls {
       const value = h.kind === 'avoid' ? (r < 0.6 ? values[0] : r < 0.85 ? values[1] : values[2]) : r < 0.65 ? values[0] : values[1]
       this.upsertCheckin(other, h.id, this.today, value)
     }
-    this.commit({ kind: 'checkin_done', playerId: other, text: `👀 ${this.nameOf(other)} vient de faire son ${CHECKIN}` })
+    this.commit(makeActivity('checkin_done', other, this.nameOf(other)))
   }
 
   // ─── Commandes de démo ───────────────────────────────────────────────────

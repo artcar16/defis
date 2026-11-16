@@ -1,19 +1,17 @@
 /**
  * ⚙️ Réglages : profil, objectif, habitudes, propositions, jour de la pesée,
- * enjeu de la semaine, (démo) et déconnexion.
+ * enjeu de la semaine, (démo) et compte (changer mon code, se déconnecter).
  *
  * Règle d'or (SPEC, décisions 2, 5 et 6) : le cosmétique est immédiat, les règles
  * du jeu passent par une proposition que l'autre accepte, effective le lundi suivant.
  */
 import { motion, useReducedMotion } from 'motion/react'
-import { useState } from 'react'
 import { plural } from '../core/fr'
 import { useDuel } from '../data/DuelProvider'
 import { tint } from '../ui/color'
-import { errorText } from '../ui/format'
-import { Button, ScreenHeader, springy } from '../ui/kit'
+import { ScreenHeader, springy } from '../ui/kit'
 import { ANCHORS, useNav } from '../ui/nav'
-import { useToast } from '../ui/toast'
+import { AccountSection } from './settings/AccountSection'
 import { DemoSection } from './settings/DemoSection'
 import { GoalSection } from './settings/GoalSection'
 import { HabitsSection } from './settings/HabitsSection'
@@ -40,7 +38,7 @@ export function SettingsScreen() {
       <WeighDaySection index={4} />
       <StakeSection index={5} />
       {demo && <DemoSection index={6} />}
-      <SignOut />
+      <AccountSection index={demo ? 7 : 6} />
 
       <p className="mt-6 text-center text-[13px] font-semibold text-muted">
         Duel des Défauts 🥊 · avec ❤️ et mauvaise foi
@@ -88,33 +86,5 @@ function InboxBanner({ count, otherName, color }: { count: number; otherName: st
         ↓
       </span>
     </motion.button>
-  )
-}
-
-function SignOut() {
-  const { source, me } = useDuel()
-  const toast = useToast()
-  const [busy, setBusy] = useState(false)
-  return (
-    <div className="mt-6">
-      <Button
-        variant="soft"
-        size="lg"
-        block
-        disabled={busy}
-        onClick={async () => {
-          setBusy(true)
-          try {
-            await source.signOut()
-            toast({ text: `À plus, ${me.name} 👋` })
-          } catch (e) {
-            toast({ text: errorText(e), color: 'var(--color-craquage)' })
-            setBusy(false)
-          }
-        }}
-      >
-        👋 Se déconnecter
-      </Button>
-    </div>
   )
 }
