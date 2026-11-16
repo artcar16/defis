@@ -222,6 +222,10 @@ _Points tranchés pendant le projet. Ils complètent (et priment sur) les sectio
 13. **Badges** : « 7 jours sans… » = 7 jours d'affilée à 😇 Nickel (un jour non rempli casse la série) ; 📅 Assidu·e = 7 jours d'affilée avec un check-in complet ; 🚀 Remontada = être strictement mené au total du lundi au jeudi, puis gagner la manche ; 👑 Série royale = 3 manches gagnées d'affilée (une égalité casse la série). Un badge débloqué le reste.
 14. **Début du duel** : la date de début (un lundi) est dans le fichier de config. Conseil : faire la pesée de départ le dimanche d'avant.
 15. **Jours restants** : le jour en cours compte (le dimanche, il reste 1 jour).
+16. **Badges gravés** : un badge (ou un palier 🪶) est enregistré dès qu'il est débloqué. Si une correction encore permise (aujourd'hui, hier, pesée du jour) repasse ensuite sous le seuil, il reste débloqué. Les célébrations déjà vues sont enregistrées par joueur (elles ne se rejouent pas sur un autre téléphone).
+17. **Une proposition à la fois par sujet** : refaire une proposition sur le même sujet (objectif, jour de pesée, type ou désactivation d'une même habitude) remplace celle en attente.
+18. **Objectif de poids privé** : l'autre ne voit jamais le poids objectif en kg, seulement le % depuis le départ, y compris dans les propositions (sauf si on a choisi de montrer ses kilos).
+19. **Tirage automatique** : le gage du lundi est tiré au sort de façon déterministe (même liste + même lundi = même gage), pour que les deux téléphones tirent le même sans se concerter.
 
 ## Journal des modifications
 
@@ -229,3 +233,4 @@ _Points tranchés pendant le projet. Ils complètent (et priment sur) les sectio
 | --- | --- |
 | 2026-11-16 | Création du cahier des charges. |
 | 2026-11-16 | Décisions 1 à 4 validées (fin de manche, changements de règles à deux, pesée le jour J, enjeu verrouillé le lundi soir) ; précisions 5 à 15. |
+| 2026-11-16 | Maquette relue (règles, rendu iPhone, textes, parcours, confidentialité) ; précisions 16 à 19. |
