@@ -49,8 +49,9 @@
   50% { transform: translateY(-6px); }
 }
 
+/* Thème sombre : suit le téléphone, sauf choix explicite data-theme="light" / "dark" sur <html>. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme='light']) {
     --color-bg: #1a1230;
     --color-bg-2: #221840;
     --color-surface: #2a2047;
@@ -61,7 +62,21 @@
     --color-line: #3d3163;
     --shadow-card: 0 10px 30px -14px rgb(0 0 0 / 0.6), 0 2px 0 rgb(0 0 0 / 0.15);
     --shadow-pop: 0 18px 40px -12px rgb(0 0 0 / 0.7);
+    color-scheme: dark;
   }
+}
+:root[data-theme='dark'] {
+    --color-bg: #1a1230;
+    --color-bg-2: #221840;
+    --color-surface: #2a2047;
+    --color-sunken: #221a3c;
+    --color-ink: #f7f1ff;
+    --color-ink-soft: #ddd0f0;
+    --color-muted: #a99bc2;
+    --color-line: #3d3163;
+    --shadow-card: 0 10px 30px -14px rgb(0 0 0 / 0.6), 0 2px 0 rgb(0 0 0 / 0.15);
+    --shadow-pop: 0 18px 40px -12px rgb(0 0 0 / 0.7);
+    color-scheme: dark;
 }
 
 @layer base {
@@ -69,7 +84,7 @@
     -webkit-text-size-adjust: 100%;
     -webkit-tap-highlight-color: transparent;
     background: var(--color-bg);
-    color-scheme: light dark;
+    color-scheme: light;
   }
   body {
     margin: 0;

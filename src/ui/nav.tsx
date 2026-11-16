@@ -12,12 +12,13 @@ export type SheetState =
   | { kind: 'results'; weekStart: DayKey; auto?: boolean }
   | null
 
-export const TABS: { id: TabId; label: string; emoji: string }[] = [
-  { id: 'ring', label: 'Ring', emoji: '🥊' },
-  { id: 'checkin', label: 'Check-in', emoji: '✅' },
-  { id: 'stats', label: 'Stats', emoji: '📊' },
-  { id: 'badges', label: 'Badges', emoji: '🏅' },
-  { id: 'settings', label: 'Réglages', emoji: '⚙️' },
+/** `hash` = ancre d'URL de l'onglet (#reglages plutôt que #settings, réservé par certains hébergeurs). */
+export const TABS: { id: TabId; label: string; emoji: string; hash: string }[] = [
+  { id: 'ring', label: 'Ring', emoji: '🥊', hash: 'ring' },
+  { id: 'checkin', label: 'Check-in', emoji: '✅', hash: 'checkin' },
+  { id: 'stats', label: 'Stats', emoji: '📊', hash: 'stats' },
+  { id: 'badges', label: 'Badges', emoji: '🏅', hash: 'badges' },
+  { id: 'settings', label: 'Réglages', emoji: '⚙️', hash: 'reglages' },
 ]
 
 interface NavValue {
@@ -32,7 +33,7 @@ const NavContext = createContext<NavValue | null>(null)
 
 function tabFromHash(): TabId {
   const h = typeof location !== 'undefined' ? location.hash.replace('#', '') : ''
-  return (TABS.find((t) => t.id === h)?.id ?? 'ring') as TabId
+  return TABS.find((t) => t.hash === h || t.id === h)?.id ?? 'ring'
 }
 
 export function NavProvider({ children }: { children: ReactNode }) {
@@ -44,7 +45,7 @@ export function NavProvider({ children }: { children: ReactNode }) {
   const setTab = useCallback((t: TabId) => {
     setTabState(t)
     try {
-      history.replaceState(null, '', `#${t}`)
+      history.replaceState(null, '', `#${TABS.find((x) => x.id === t)?.hash ?? t}`)
     } catch {
       // ignore (iframe sandboxée)
     }
