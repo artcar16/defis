@@ -1,6 +1,6 @@
 /**
- * 🥊 Écran de connexion : grand titre, les deux joueurs face à face, formulaire
- * email + mot de passe. En maquette, une section « Mode démo » permet de choisir son joueur.
+ * 🥊 Écran de connexion : grand titre, les deux joueurs face à face. Pas de compte ni
+ * d'email (décision 20) : on choisit son prénom. En maquette, « Jouer en tant que ».
  */
 import { motion, useReducedMotion } from 'motion/react'
 import { DEFAULT_PLAYERS } from '../config/defaults'
@@ -9,7 +9,6 @@ import type { Player } from '../core/types'
 import { useDuel } from '../data/DuelProvider'
 import { deep, tint } from '../ui/color'
 import { Avatar, Button, springy } from '../ui/kit'
-import { LoginForm } from './settings/LoginForm'
 import { ON_GOLD } from './settings/format'
 
 type Fighter = Pick<Player, 'id' | 'name' | 'emoji' | 'color'>
@@ -24,16 +23,12 @@ const FLOATERS = [
 ]
 
 export function LoginScreen() {
-  const { demo, snapshot, source } = useDuel()
+  const { demo, snapshot } = useDuel()
   const reduced = useReducedMotion() ?? false
 
   const fighters: Fighter[] =
     snapshot.players.length >= 2 ? snapshot.players : DEFAULT_PLAYERS.map((p) => ({ id: p.key, name: p.name, emoji: p.emoji, color: p.color }))
   const [left, right] = fighters
-
-  // La source se charge de tout (Supabase à l'étape 4). En démo, elle répond par un message
-  // qui renvoie aux boutons « Jouer en tant que », affiché sous le formulaire.
-  const submit = (email: string, password: string) => source.signIn(email, password)
 
   return (
     <div className="relative mx-auto flex min-h-dvh max-w-md flex-col overflow-hidden px-4 pt-[max(env(safe-area-inset-top),24px)] pb-[max(env(safe-area-inset-bottom),24px)]">
@@ -115,7 +110,7 @@ export function LoginScreen() {
               <h2 id="demo-title" className="font-display text-[20px] leading-tight font-bold text-ink">
                 Mode démo
               </h2>
-              <p className="text-[15px] leading-snug font-semibold text-muted">Pas encore de vrais comptes&nbsp;: choisis ton camp&nbsp;!</p>
+              <p className="text-[15px] leading-snug font-semibold text-muted">Choisis ton camp&nbsp;!</p>
             </div>
           </div>
           <div className="mt-4 flex flex-col gap-3.5">
@@ -127,21 +122,6 @@ export function LoginScreen() {
           </div>
         </motion.section>
       )}
-
-      {/* Connexion */}
-      <motion.section
-        className="card relative mt-5 p-4"
-        initial={reduced ? false : { opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ ...springy, delay: 0.65 }}
-        aria-labelledby="login-title"
-      >
-        <h2 id="login-title" className="mb-3 font-display text-[20px] font-bold text-ink">
-          <span aria-hidden="true">🔐 </span>
-          {demo ? 'Avec ton compte (bientôt)' : 'Connexion'}
-        </h2>
-        <LoginForm onSubmit={submit} />
-      </motion.section>
 
       <p className="relative mt-5 text-center text-[13px] font-semibold text-muted">Rien que vous deux. Pas de pub, pas de pitié 😈</p>
     </div>
