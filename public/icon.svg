@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!--
+    Duel des Défauts : icône d'app (source de tous les PNG, voir scripts/render-icons.mjs).
+    Corail (Laetitia, à gauche) contre bleu électrique (Arthus, à droite), séparés par un
+    éclair crème. Au centre, la pastille dorée « VS » de l'écran de connexion : inclinée de
+    −8°, ombre pleine #E09A00, contour encre façon bouton de jeu.
+    Carré plein et opaque, sans coins arrondis (iOS et Android les appliquent eux-mêmes).
+    Rien d'important à moins de 10 % du bord. « VS » est en Fredoka 700 converti en
+    contours : aucune police n'est nécessaire.
+    #fond va jusqu'aux bords ; #motif est réduit par le script pour la version « maskable »
+    (motif dans le cercle central de 80 %).
+  -->
+  <defs>
+    <linearGradient id="corail" x1="0" y1="0" x2="0.7" y2="1">
+      <stop offset="0" stop-color="#FF8571"/>
+      <stop offset="1" stop-color="#EC4943"/>
+    </linearGradient>
+    <linearGradient id="bleu" x1="1" y1="0" x2="0.3" y2="1">
+      <stop offset="0" stop-color="#4D84FF"/>
+      <stop offset="1" stop-color="#1C50E0"/>
+    </linearGradient>
+    <radialGradient id="halo" cx="0.5" cy="0.49" r="0.5">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.3"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="flou" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="22"/>
+    </filter>
+  </defs>
+
+  <g id="fond">
+    <rect width="1024" height="1024" fill="#FFF4E6"/>
+    <polygon fill="url(#corail)" points="-60,-60 700,-60 640,130 716,150 512,512 308,874 384,894 324,1084 -60,1084"/>
+    <polygon fill="url(#bleu)" points="1084,-60 700,-60 640,130 716,150 512,512 308,874 384,894 324,1084 1084,1084"/>
+    <circle cx="512" cy="518" r="520" fill="url(#halo)"/>
+    <polyline fill="none" stroke="#FFF4E6" stroke-width="54" stroke-linejoin="miter" stroke-miterlimit="10" points="700,-60 640,130 716,150 512,512 308,874 384,894 324,1084"/>
+  </g>
+
+  <g id="motif">
+    <path d="M184.3 358.9L142 340.9M297.8 213.7L270.1 176.9M792.5 278.8L828.8 250.5M864.5 448.5L910.1 442.1" fill="none" stroke="#FFF4E6" stroke-width="48" stroke-linecap="round"/>
+    <g transform="rotate(-8 512 498)">
+      <circle cx="512" cy="568" r="320" fill="#2B1D3F" opacity="0.35" filter="url(#flou)"/>
+      <circle cx="512" cy="542" r="320" fill="#2B1D3F"/>
+      <circle cx="512" cy="498" r="320" fill="#2B1D3F"/>
+      <circle cx="512" cy="542" r="290" fill="#E09A00"/>
+      <circle cx="512" cy="498" r="290" fill="#FFC23D"/>
+      <path d="M369.2 315.2A232 232 0 0 1 512 266" fill="none" stroke="#FFFFFF" stroke-opacity="0.8" stroke-width="36" stroke-linecap="round"/>
+      <path fill="#2B1D3F" transform="translate(512 504) scale(0.375) translate(-642.5 341.5)" d="M366 8Q333 8 310.0 -4.5Q287 -17 276 -42L39 -563Q20 -607 29.5 -632.5Q39 -658 85 -680Q117 -698 139.5 -698.5Q162 -699 178.0 -684.0Q194 -669 206 -638L364 -249L522 -638Q535 -669 551.0 -684.0Q567 -699 590.0 -698.0Q613 -697 643 -680Q693 -656 701.0 -631.5Q709 -607 689 -563L452 -42Q442 -20 418.5 -6.0Q395 8 366 8Z M999 19Q938 19 895.5 4.0Q853 -11 826.0 -31.5Q799 -52 785.0 -69.0Q771 -86 768 -90Q748 -115 743.5 -135.0Q739 -155 749.5 -175.0Q760 -195 785 -219Q808 -241 830.0 -243.5Q852 -246 873.5 -234.0Q895 -222 915 -199Q939 -172 956.0 -162.5Q973 -153 995 -153Q1022 -153 1039.0 -159.5Q1056 -166 1064.0 -179.5Q1072 -193 1072 -214Q1072 -231 1055.0 -240.5Q1038 -250 1010.5 -257.0Q983 -264 949.0 -272.5Q915 -281 882 -295Q862 -303 843.0 -315.0Q824 -327 807.5 -342.5Q791 -358 779.0 -379.5Q767 -401 760.5 -428.0Q754 -455 754 -489Q754 -550 784.5 -598.0Q815 -646 868.5 -674.0Q922 -702 990 -702Q1039 -702 1074.0 -694.0Q1109 -686 1131.5 -675.0Q1154 -664 1166.0 -654.5Q1178 -645 1181 -642Q1214 -612 1217.0 -590.5Q1220 -569 1193 -529Q1163 -486 1134.0 -480.5Q1105 -475 1067 -499Q1059 -505 1051.0 -512.5Q1043 -520 1029.5 -525.5Q1016 -531 989 -531Q979 -531 969.0 -527.5Q959 -524 952.0 -518.5Q945 -513 940.5 -505.0Q936 -497 936 -488Q936 -467 952.0 -455.5Q968 -444 994.5 -438.0Q1021 -432 1053.0 -426.0Q1085 -420 1118 -410Q1145 -401 1170.0 -387.0Q1195 -373 1214.0 -351.0Q1233 -329 1244.5 -296.5Q1256 -264 1256 -217Q1256 -152 1231.0 -106.5Q1206 -61 1166.5 -33.5Q1127 -6 1082.5 6.5Q1038 19 999 19Z"/>
+    </g>
+  </g>
+</svg>
