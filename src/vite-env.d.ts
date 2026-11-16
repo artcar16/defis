@@ -11,3 +11,9 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv
 }
+
+/**
+ * Les variables Supabase publiques trouvées au moment du build (liste blanche
+ * SUPABASE_ENV_NAMES, injectée par vite.config.ts). Rien d'autre de l'environnement.
+ */
+declare const __SUPABASE_ENV__: import('./data/supabase/config').SupabaseEnv

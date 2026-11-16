@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { projectUrl, supabaseConfig } from './config'
+import { describe, expect, it, vi } from 'vitest'
+import { isSecretKey, projectUrl, supabaseConfig } from './config'
 import { classifyError, isCodeFormatOk, MESSAGES, toUserMessage } from './errors'
 
 describe('erreurs Supabase → français', () => {
@@ -71,6 +71,47 @@ describe('erreurs Supabase → français', () => {
     expect(isCodeFormatOk('12345')).toBe(false)
     expect(isCodeFormatOk('1234567')).toBe(false)
     expect(isCodeFormatOk('12 456')).toBe(false)
+  })
+})
+
+describe('supabaseConfig · noms des variables et clé secrète', () => {
+  const url = 'https://abcd.supabase.co'
+  const jwt = (payload: object) =>
+    `eyJhbGciOiJIUzI1NiJ9.${btoa(JSON.stringify(payload)).replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_')}.sig`
+
+  it('lit les noms Next.js créés par Supabase / Vercel (NEXT_PUBLIC_…)', () => {
+    for (const keyName of [
+      'NEXT_PUBLIC_SUPABASE_ANON_KEY',
+      'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY',
+      'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY',
+    ] as const) {
+      expect(supabaseConfig({ NEXT_PUBLIC_SUPABASE_URL: url, [keyName]: 'sb_publishable_k' }, ''), keyName).toEqual({
+        url,
+        key: 'sb_publishable_k',
+      })
+    }
+  })
+
+  it('accepte aussi les variantes Vite et mélange les familles', () => {
+    expect(supabaseConfig({ VITE_SUPABASE_URL: url, VITE_SUPABASE_ANON_KEY: 'a' }, '')).toEqual({ url, key: 'a' })
+    expect(supabaseConfig({ VITE_SUPABASE_URL: url, NEXT_PUBLIC_SUPABASE_ANON_KEY: 'b' }, '')).toEqual({ url, key: 'b' })
+    // Le nom officiel passe devant les variantes, et une variable vide est ignorée.
+    expect(
+      supabaseConfig({ VITE_SUPABASE_URL: ' ', NEXT_PUBLIC_SUPABASE_URL: url, NEXT_PUBLIC_SUPABASE_ANON_KEY: 'c', VITE_SUPABASE_PUBLISHABLE_KEY: 'd' }, ''),
+    ).toEqual({ url, key: 'd' })
+  })
+
+  it('refuse la clé secrète, sans jamais l’écrire dans la console', () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    for (const key of ['sb_secret_abc123', jwt({ role: 'service_role', iss: 'supabase' })]) {
+      expect(supabaseConfig({ NEXT_PUBLIC_SUPABASE_URL: url, NEXT_PUBLIC_SUPABASE_ANON_KEY: key }, '')).toBeNull()
+      expect(JSON.stringify(spy.mock.calls)).not.toContain(key)
+    }
+    expect(spy).toHaveBeenCalled()
+    spy.mockRestore()
+    expect(isSecretKey(jwt({ role: 'anon' }))).toBe(false)
+    expect(isSecretKey('pas.un.jwt')).toBe(false)
+    expect(isSecretKey('sb_publishable_x')).toBe(false)
   })
 })
 

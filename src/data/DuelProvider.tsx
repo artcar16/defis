@@ -53,9 +53,10 @@ function currentSearch(): string {
   }
 }
 
-/** La vraie base si les clés sont là (.env / Vercel) et pas ?demo ; sinon la maquette. */
+/** La vraie base si l'URL et la clé sont là (.env / Vercel, noms VITE_… ou NEXT_PUBLIC_…) et pas ?demo ; sinon la maquette. */
 function createSource(): DuelSource {
-  const config = supabaseConfig(import.meta.env, currentSearch())
+  // Seules les variables publiques de la liste blanche (vite.config.ts) : jamais tout import.meta.env.
+  const config = supabaseConfig(__SUPABASE_ENV__, currentSearch())
   return config ? createSupabaseSource(config.url, config.key) : new DemoSource()
 }
 
