@@ -1,6 +1,5 @@
 @import 'tailwindcss';
-@import '@fontsource-variable/fredoka';
-@import '@fontsource-variable/nunito';
+@import './fonts.css';
 
 /*
  * 🎨 Thème « jeu mobile ». Toutes les couleurs passent par ces jetons :
