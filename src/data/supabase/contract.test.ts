@@ -21,7 +21,7 @@ import { NBSP } from '../../core/fr'
 import { isInGoalZone, percentChange, weighInPoints } from '../../core/scoring'
 import { buildSeason, pendingResultsWeek } from '../../core/season'
 import { drawStake } from '../../core/stake'
-import type { CheckinValue, DayKey, DuelSnapshot, Habit, PlayerId, Proposal } from '../../core/types'
+import type { CheckinValue, DayKey, DuelSnapshot, Habit, HabitKind, PlayerId, Proposal } from '../../core/types'
 import { activityText, type ActivityKind } from '../activity'
 import { maskWeighIn, pctHalf } from '../mask'
 import type { Activity } from '../source'
@@ -366,9 +366,13 @@ function activeHabits(s: DuelSnapshot, player: PlayerId, day: DayKey): Habit[] {
   return s.habits.filter((h) => h.playerId === player && h.activeFrom <= day && (h.activeUntil === null || day < h.activeUntil))
 }
 
-/** Remplit tout le check-in du jour du joueur connecté (une valeur par type). */
-async function fillDay(phone: Phone, day: DayKey, values: { avoid: CheckinValue; do: CheckinValue }) {
-  for (const h of activeHabits(phone.snap, phone.snap.meId, day)) await phone.src.setCheckin(day, h.id, values[h.kind])
+/**
+ * Remplit tout le check-in du jour du joueur connecté (une valeur par type). Tout ou rien
+ * (Grignotage) : `avoid_strict`, sinon la même valeur que `avoid` (jamais « un peu »).
+ */
+async function fillDay(phone: Phone, day: DayKey, values: { avoid: CheckinValue; avoid_strict?: CheckinValue; do: CheckinValue }) {
+  const byKind: Record<HabitKind, CheckinValue> = { ...values, avoid_strict: values.avoid_strict ?? values.avoid }
+  for (const h of activeHabits(phone.snap, phone.snap.meId, day)) await phone.src.setCheckin(day, h.id, byKind[h.kind])
 }
 
 function toast(kind: ActivityKind, name: string, opts: { paid?: boolean } = {}): string {
@@ -611,7 +615,7 @@ describe('le duel en direct entre les téléphones', () => {
     expect(l.snap.checkins).toContainEqual(expect.objectContaining({ playerId: A, habitId: ongles.id, value: 'nickel' }))
     expect(l.takeToasts()).toEqual([])
 
-    await a.src.setCheckin(day, grignotage.id, 'unpeu')
+    await a.src.setCheckin(day, grignotage.id, 'craquage')
     await a.src.setCheckin(day, sport.id, 'fait')
     await settle()
     expect(await eventKinds(first)).toEqual(['checkin', 'checkin', 'checkin_done'])
@@ -624,7 +628,7 @@ describe('le duel en direct entre les téléphones', () => {
     expect(l.snap.checkins).toEqual(a.snap.checkins)
     for (const p of [a, l, a2]) {
       const season = buildSeason(p.snap, day)
-      expect(season.current.scores[A].days[0]).toMatchObject({ complete: true, score: 83 })
+      expect(season.current.scores[A].days[0]).toMatchObject({ complete: true, score: 67 })
       expect(season.current.scores[L].days[0]).toMatchObject({ complete: false, score: 0 })
     }
 
@@ -886,7 +890,7 @@ describe('le duel en direct entre les téléphones', () => {
     for (const day of week) {
       await setNow(day, 21)
       await fillDay(a, day, { avoid: 'nickel', do: 'fait' })
-      await fillDay(l, day, { avoid: 'unpeu', do: day < week[3] ? 'fait' : 'pasfait' })
+      await fillDay(l, day, { avoid: 'unpeu', avoid_strict: 'craquage', do: day < week[3] ? 'fait' : 'pasfait' })
     }
     const monday = addDays(SEASON_START, 7)
     await setNow(monday, 9)

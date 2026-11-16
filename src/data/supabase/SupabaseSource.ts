@@ -23,6 +23,7 @@ import { DEFAULT_GAGES, DEFAULT_PLAYERS, SEASON_START } from '../../config/defau
 import { RULES } from '../../config/rules'
 import { badgeUnlocksToRecord, computeBadges } from '../../core/badges'
 import { addDays, dayKeyAt, weekStartOf } from '../../core/dates'
+import { checkinValueRefusal } from '../../core/scoring'
 import { buildSeason } from '../../core/season'
 import { drawStake } from '../../core/stake'
 import type { BadgeUnlock, CheckinValue, DayKey, DuelSnapshot, PlayerId, ProposalPayload } from '../../core/types'
@@ -427,7 +428,12 @@ export class SupabaseSource implements DuelSource {
 
   async setCheckin(day: DayKey, habitId: string, value: CheckinValue | null): Promise<void> {
     this.requireSignedIn()
-    if (!this.snapshot.habits.some((h) => h.id === habitId && h.playerId === this.snapshot.meId)) throw new Error(MESSAGES.unknownHabit)
+    const habit = this.snapshot.habits.find((h) => h.id === habitId && h.playerId === this.snapshot.meId)
+    if (!habit) throw new Error(MESSAGES.unknownHabit)
+    // Une réponse de son type : le serveur refuserait (même message), autant ne rien afficher
+    // d'optimiste (« Un peu » sur une habitude tout ou rien, précision 22).
+    const refusal = checkinValueRefusal(habit, value)
+    if (refusal) throw new Error(refusal)
     const at = this.clock().toISOString()
     await this.optimistic(
       (s) => withCheckin(s, day, habitId, value, at),

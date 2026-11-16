@@ -13,17 +13,12 @@ import type { DayKey, Habit, HabitKind, Player, Proposal } from '../../core/type
 import { useDuel } from '../../data/DuelProvider'
 import { deep, tint } from '../../ui/color'
 import { Button, Pill, springy } from '../../ui/kit'
-import { KIND_EMOJI, KIND_LABEL, KIND_SCALE, fromLabel } from './format'
+import { KIND_EMOJI, KIND_LABEL, KIND_ORDER, KIND_SCALE, fromLabel } from './format'
 import { useDescribe } from './useDescribe'
-import { Collapsible, EmojiGrid, Label, MiniButton, Note, Section, Segmented, StatusLine, TextField, useAction } from './ui'
+import { Collapsible, EmojiGrid, Label, MiniButton, Note, Section, StatusLine, TextField, useAction } from './ui'
 
 const NAME_MAX = 24
 const HINT_MAX = 40
-
-const KIND_OPTIONS: { value: HabitKind; label: string }[] = [
-  { value: 'avoid', label: `${KIND_EMOJI.avoid} À éviter` },
-  { value: 'do', label: `${KIND_EMOJI.do} À faire` },
-]
 
 /** Habitudes encore d'actualité : actives, à venir, ou désactivées à partir de lundi. */
 export function currentHabits(habits: Habit[], playerId: string, today: DayKey): Habit[] {
@@ -229,8 +224,9 @@ function HabitEditor({ habit, pending }: { habit: Habit; pending: Proposal | nul
 
   const upcoming = habit.activeFrom > today
   const ending = habit.activeUntil !== null
-  const otherKind: HabitKind = habit.kind === 'avoid' ? 'do' : 'avoid'
+  const otherKinds = KIND_ORDER.filter((k) => k !== habit.kind)
   const monday = nextMonday(today)
+  const kindTitleId = useId()
 
   const saveLook = () =>
     void run(
@@ -295,14 +291,26 @@ function HabitEditor({ habit, pending }: { habit: Habit; pending: Proposal | nul
         <Note emoji="👋">Plus rien à négocier&nbsp;: désactivée {fromLabel(habit.activeUntil)}</Note>
       ) : (
         <div className="mt-2 flex flex-col gap-3">
-          <Button
-            variant="soft"
-            block
-            disabled={busy}
-            onClick={() => proposeRule({ kind: 'habit_kind', habitId: habit.id, habitKind: otherKind })}
-          >
-            🔄 Passer en «&nbsp;{KIND_LABEL[otherKind]}&nbsp;»
-          </Button>
+          <div role="group" aria-labelledby={kindTitleId} className="flex flex-col gap-3">
+            <p id={kindTitleId} className="px-1 font-display text-[15px] font-semibold text-ink-soft">
+              🔄 Changer de type&nbsp;:
+            </p>
+            {otherKinds.map((k) => (
+              <Button
+                key={k}
+                variant="soft"
+                block
+                disabled={busy}
+                className="flex-col gap-0.5! py-2.5! text-center"
+                onClick={() => proposeRule({ kind: 'habit_kind', habitId: habit.id, habitKind: k })}
+              >
+                <span className="leading-tight">
+                  {KIND_EMOJI[k]} {capitalize(KIND_LABEL[k])}
+                </span>
+                <span className="text-[14px] leading-snug text-muted">{KIND_SCALE[k]}</span>
+              </Button>
+            ))}
+          </div>
           <Button variant="soft" block disabled={busy} onClick={() => proposeRule({ kind: 'habit_disable', habitId: habit.id })}>
             👋 Désactiver
           </Button>
@@ -455,8 +463,7 @@ function AddHabitForm({ existing, onDone }: { existing: Habit[]; onDone: () => v
       <Label>Emoji</Label>
       <EmojiGrid emojis={HABIT_EMOJIS.includes(emoji) ? HABIT_EMOJIS : [emoji, ...HABIT_EMOJIS]} value={emoji} onPick={setEmoji} label="Emoji de l’habitude" color={me.color} />
       <Label>Type</Label>
-      <Segmented options={KIND_OPTIONS} value={kind} onChange={setKind} label="Type d’habitude" color={me.color} />
-      <p className="mt-2 px-1 text-center text-[15px] text-muted">{KIND_SCALE[kind]}</p>
+      <KindPicker value={kind} onChange={setKind} color={me.color} />
 
       <Button block size="lg" className="mt-4" disabled={!valid || busy} onClick={() => void submit()}>
         Proposer à {other.name} 📨
@@ -465,5 +472,47 @@ function AddHabitForm({ existing, onDone }: { existing: Habit[]; onDone: () => v
         Si {other.name} accepte, elle compte {fromLabel(nextMonday(today))}
       </p>
     </motion.div>
+  )
+}
+
+/** Les 3 types, chacun avec ses réponses du check-in : on voit tout de suite ce qui change. */
+function KindPicker({ value, onChange, color }: { value: HabitKind; onChange: (k: HabitKind) => void; color: string }) {
+  const reduced = useReducedMotion() ?? false
+  return (
+    <div role="radiogroup" aria-label="Type d’habitude" className="flex flex-col gap-2">
+      {KIND_ORDER.map((k) => {
+        const active = k === value
+        return (
+          <motion.button
+            key={k}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            onClick={() => onChange(k)}
+            whileTap={reduced ? undefined : { scale: 0.97 }}
+            className="flex min-h-14 w-full items-center gap-3 rounded-2xl bg-surface px-3.5 py-2.5 text-left"
+            style={{
+              boxShadow: active
+                ? `inset 0 0 0 3px ${color}, 0 3px 0 ${tint(color, 45, 'var(--color-line)')}`
+                : 'inset 0 0 0 2px var(--color-line), 0 3px 0 var(--color-line)',
+            }}
+          >
+            <span className="min-w-0 flex-1">
+              <span className="block font-display text-[17px] leading-tight font-semibold text-ink">
+                {KIND_EMOJI[k]} {capitalize(KIND_LABEL[k])}
+              </span>
+              <span className="mt-0.5 block text-[14px] leading-snug font-semibold text-muted">{KIND_SCALE[k]}</span>
+            </span>
+            <span
+              className="grid size-7 shrink-0 place-items-center rounded-full text-[15px] font-bold text-white"
+              style={active ? { background: color } : { boxShadow: 'inset 0 0 0 2px var(--color-line)' }}
+              aria-hidden="true"
+            >
+              {active ? '✓' : ''}
+            </span>
+          </motion.button>
+        )
+      })}
+    </div>
   )
 }

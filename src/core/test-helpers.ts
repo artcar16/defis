@@ -3,7 +3,7 @@
  */
 import { DEFAULT_GAGES } from '../config/defaults'
 import { addDays, daysRange } from './dates'
-import { indexCheckins, type DayScore, type ScoringData } from './scoring'
+import { indexCheckins, isAvoidKind, type DayScore, type ScoringData } from './scoring'
 import type { SeasonRecord } from './season'
 import type {
   BadgeHabitKey,
@@ -45,7 +45,7 @@ export function makeHabit(
     playerId,
     name: id,
     hint: '',
-    emoji: kind === 'avoid' ? '🙅' : '✅',
+    emoji: isAvoidKind(kind) ? '🙅' : '✅',
     kind,
     badgeKey: null,
     activeFrom: START,
@@ -55,14 +55,17 @@ export function makeHabit(
   }
 }
 
-/** Les habitudes de départ : Arthus (ongles, grignotage, sport), Laetitia (grattage, grignotage, sport). */
+/**
+ * Les habitudes de départ (comme src/config/defaults.ts) : Arthus (ongles, grignotage, sport),
+ * Laetitia (grattage, grignotage, sport). Grignotage est « tout ou rien » (précision 22).
+ */
 export function defaultHabits(from: DayKey = START): Habit[] {
   return [
     makeHabit('a-ongles', A, 'avoid', { name: 'Ongles', emoji: '💅', badgeKey: 'ongles', activeFrom: from, sortOrder: 0 }),
-    makeHabit('a-grignotage', A, 'avoid', { name: 'Grignotage', emoji: '🍪', badgeKey: 'grignotage', activeFrom: from, sortOrder: 1 }),
+    makeHabit('a-grignotage', A, 'avoid_strict', { name: 'Grignotage', emoji: '🍪', badgeKey: 'grignotage', activeFrom: from, sortOrder: 1 }),
     makeHabit('a-sport', A, 'do', { name: 'Sport', emoji: '🏃', badgeKey: 'sport', activeFrom: from, sortOrder: 2 }),
     makeHabit('l-grattage', L, 'avoid', { name: 'Grattage', emoji: '🦟', badgeKey: 'grattage', activeFrom: from, sortOrder: 0 }),
-    makeHabit('l-grignotage', L, 'avoid', { name: 'Grignotage', emoji: '🍪', badgeKey: 'grignotage', activeFrom: from, sortOrder: 1 }),
+    makeHabit('l-grignotage', L, 'avoid_strict', { name: 'Grignotage', emoji: '🍪', badgeKey: 'grignotage', activeFrom: from, sortOrder: 1 }),
     makeHabit('l-sport', L, 'do', { name: 'Sport', emoji: '🏃', badgeKey: 'sport', activeFrom: from, sortOrder: 2 }),
   ]
 }
@@ -73,7 +76,7 @@ export function ci(playerId: PlayerId, habitId: string, day: DayKey, value: Chec
 
 /** La meilleure valeur pour un type d'habitude. */
 export function best(kind: HabitKind): CheckinValue {
-  return kind === 'avoid' ? 'nickel' : 'fait'
+  return isAvoidKind(kind) ? 'nickel' : 'fait'
 }
 
 /** Remplit une habitude sur une plage de jours avec la même valeur (par défaut : la meilleure). */

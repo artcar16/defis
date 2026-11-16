@@ -1,16 +1,16 @@
 /**
  * Une carte par habitude, avec de gros boutons emoji :
- * 3 états pour « à éviter » (😇 😬 🙈), 2 pour « à faire » (💪 🛋️).
+ * 3 états pour « à éviter » (😇 😬 🙈), 2 pour « tout ou rien » (😇 🙈) et pour « à faire » (💪 🛋️).
  * Un tap = enregistré. Rebond au tap, réponse choisie bien colorée, les autres en retrait.
  */
 import { AnimatePresence, motion, useAnimationControls, useReducedMotion, type TargetAndTransition } from 'motion/react'
 import { useState, type Ref } from 'react'
-import { formatPts, formatSignedPts } from '../../core/fr'
+import { NBSP, capitalize, formatPts, formatSignedPts } from '../../core/fr'
 import { pointsFor, valuesFor } from '../../core/scoring'
-import type { CheckinValue } from '../../core/types'
+import type { CheckinValue, Habit } from '../../core/types'
 import { deep, tint } from '../../ui/color'
 import { VALUE_COLORS, VALUE_LABELS, springy } from '../../ui/kit'
-import { KIND_LABELS, shadeOf } from './format'
+import { KIND_LABELS, STRICT_TAG, shadeOf } from './format'
 import type { HabitRow } from './useCheckin'
 
 interface HabitCardProps {
@@ -23,10 +23,19 @@ interface HabitCardProps {
   ref?: Ref<HTMLElement>
 }
 
+/** Sous le nom : la précision, sinon le type. « Tout ou rien » est toujours rappelé (pas de « Un peu »). */
+function subtitle(habit: Habit): string {
+  if (habit.kind === 'avoid_strict') return habit.hint ? `${habit.hint}${NBSP}· ${STRICT_TAG}` : capitalize(KIND_LABELS.avoid_strict)
+  return habit.hint || capitalize(KIND_LABELS[habit.kind])
+}
+
 export function HabitCard({ row, editable, onAnswer, index, ref }: HabitCardProps) {
   const reduced = useReducedMotion() ?? false
   const { habit, value } = row
   const values = valuesFor(habit.kind)
+  // Réponse qu'on ne peut plus choisir : un « Un peu » noté avant le passage en tout ou rien.
+  // Elle garde ses points ; on l'affiche telle quelle, et Nickel / Craquage restent au choix.
+  const legacy = value !== null && !values.includes(value)
   const c = value ? VALUE_COLORS[value] : null
   const tile = useAnimationControls()
 
@@ -67,7 +76,7 @@ export function HabitCard({ row, editable, onAnswer, index, ref }: HabitCardProp
             )}
           </h3>
           <p className="mt-0.5 text-[15px] leading-snug font-semibold text-pretty break-words text-muted">
-            {habit.hint || (habit.kind === 'avoid' ? 'À éviter' : 'À faire')}
+            {subtitle(habit)}
           </p>
         </div>
 
@@ -87,13 +96,22 @@ export function HabitCard({ row, editable, onAnswer, index, ref }: HabitCardProp
             value={v}
             points={pointsFor(habit.kind, v)}
             selected={value === v}
-            dimmed={value !== null && value !== v}
+            dimmed={value !== null && !legacy && value !== v}
             disabled={!editable}
             reduced={reduced}
             onPick={() => pick(v)}
           />
         ))}
       </div>
+
+      {legacy && value && c && (
+        <p
+          className="mt-3.5 rounded-2xl px-3 py-2 text-center text-[14px] leading-snug font-semibold text-balance"
+          style={{ background: tint(c, 14, 'transparent'), color: deep(c, 75) }}
+        >
+          {`${VALUE_LABELS[value].emoji}${NBSP}${VALUE_LABELS[value].label.replaceAll(' ', NBSP)} (avant${NBSP}le${NBSP}changement)${NBSP}· ${formatPts(row.points)}`}
+        </p>
+      )}
     </motion.article>
   )
 }

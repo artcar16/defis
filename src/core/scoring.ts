@@ -4,6 +4,7 @@
  */
 import { RULES, type Rules } from '../config/rules'
 import { addDays, diffDays, isoDayOf, weekDays, weekStartOf } from './dates'
+import { NBSP } from './fr'
 import type {
   Checkin,
   CheckinValue,
@@ -17,10 +18,20 @@ import type {
 
 // ─── Check-in ──────────────────────────────────────────────────────────────
 
-/** Points d'une réponse de check-in (0 si la valeur ne correspond pas au type). */
+/** Habitude « à éviter » (avec ou sans « Un peu ») : Nickel / Craquage, séries « sans… ». */
+export function isAvoidKind(kind: HabitKind): kind is 'avoid' | 'avoid_strict' {
+  return kind === 'avoid' || kind === 'avoid_strict'
+}
+
+/**
+ * Points d'une réponse de check-in (0 si la valeur ne correspond pas au type).
+ * « Tout ou rien » (avoid_strict) compte avec le barème de « à éviter » : un « Un peu »
+ * enregistré avant le passage en tout ou rien garde donc ses points (on ne peut simplement
+ * plus en saisir de nouveau).
+ */
 export function pointsFor(kind: HabitKind, value: CheckinValue | null | undefined, rules: Rules = RULES): number {
   if (!value) return 0
-  if (kind === 'avoid') {
+  if (isAvoidKind(kind)) {
     return value in rules.checkin.avoid ? rules.checkin.avoid[value as keyof Rules['checkin']['avoid']] : 0
   }
   return value in rules.checkin.do ? rules.checkin.do[value as keyof Rules['checkin']['do']] : 0
@@ -28,14 +39,42 @@ export function pointsFor(kind: HabitKind, value: CheckinValue | null | undefine
 
 /** Points maximum d'une habitude. */
 export function maxPointsFor(kind: HabitKind, rules: Rules = RULES): number {
-  return kind === 'avoid'
+  return isAvoidKind(kind)
     ? Math.max(...Object.values(rules.checkin.avoid))
     : Math.max(...Object.values(rules.checkin.do))
 }
 
-/** Les réponses possibles pour un type d'habitude, de la meilleure à la pire. */
+/** Les réponses qu'on peut choisir pour un type d'habitude, de la meilleure à la pire. */
 export function valuesFor(kind: HabitKind): CheckinValue[] {
-  return kind === 'avoid' ? ['nickel', 'unpeu', 'craquage'] : ['fait', 'pasfait']
+  if (kind === 'avoid') return ['nickel', 'unpeu', 'craquage']
+  if (kind === 'avoid_strict') return ['nickel', 'craquage']
+  return ['fait', 'pasfait']
+}
+
+/** Tous les types d'habitude (le Record oblige à n'en oublier aucun). */
+const KINDS: Record<HabitKind, true> = { avoid: true, avoid_strict: true, do: true }
+
+/** Les types d'habitude : à éviter, à éviter tout ou rien, à faire. */
+export const HABIT_KINDS = Object.keys(KINDS) as HabitKind[]
+
+/** Ce type d'habitude existe-t-il ? (proposition reçue, donnée d'une autre version…) */
+export function isHabitKind(kind: unknown): kind is HabitKind {
+  return typeof kind === 'string' && Object.hasOwn(KINDS, kind)
+}
+
+/**
+ * Pourquoi une réponse de check-in est refusée pour cette habitude, en français prêt à
+ * afficher (null si elle va avec son type, ou si on efface la réponse). Mêmes textes que le
+ * serveur (set_checkin de supabase/migrations/0001_duel.sql) : sur une habitude « tout ou
+ * rien », un « Un peu » a son message à lui (précision 22 de SPEC.md).
+ */
+export function checkinValueRefusal(habit: Pick<Habit, 'kind' | 'name'>, value: CheckinValue | null): string | null {
+  if (value === null || valuesFor(habit.kind).includes(value)) return null
+  if (habit.kind === 'avoid_strict' && value === 'unpeu') {
+    // Le nom tel quel, comme format('%s') côté serveur : la typographie est posée à la main.
+    return `Pas de «${NBSP}un peu${NBSP}» pour ${habit.name}${NBSP}: c’est Nickel ou Craquage 😉`
+  }
+  return 'Réponse inconnue pour cette habitude 🤔'
 }
 
 /** L'habitude compte-t-elle ce jour-là ? */

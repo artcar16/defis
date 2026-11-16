@@ -6,14 +6,27 @@
 import { RULES } from '../../config/rules'
 import { isoDayName } from '../../core/dates'
 import { NBSP, capitalize, frDate, typo } from '../../core/fr'
+import { isAvoidKind } from '../../core/scoring'
 import type { DayKey, Habit, HabitKind, PlayerId, Proposal } from '../../core/types'
 import { formatKg, formatPct } from '../../core/weight'
 
-export const KIND_LABEL: Record<HabitKind, string> = { avoid: 'à éviter', do: 'à faire' }
-export const KIND_EMOJI: Record<HabitKind, string> = { avoid: '🙅', do: '💪' }
+/**
+ * « 😇 Nickel · 😬 Un peu · 🙈 Craquage » : chaque morceau reste entier (jamais un emoji seul
+ * en bout de ligne) et la coupure se fait juste après un « · ».
+ */
+function dotted(...parts: string[]): string {
+  return parts.map((p) => p.replaceAll(' ', NBSP)).join(`${NBSP}· `)
+}
+
+/** Les types d'habitude, dans l'ordre des choix proposés. */
+export const KIND_ORDER: HabitKind[] = ['avoid', 'avoid_strict', 'do']
+export const KIND_LABEL: Record<HabitKind, string> = { avoid: 'à éviter', avoid_strict: dotted('à éviter', 'tout ou rien'), do: 'à faire' }
+export const KIND_EMOJI: Record<HabitKind, string> = { avoid: '🙅', avoid_strict: '🙅', do: '💪' }
+/** Les réponses du check-in pour chaque type (ce qui change vraiment d'un type à l'autre). */
 export const KIND_SCALE: Record<HabitKind, string> = {
-  avoid: '😇 Nickel · 😬 Un peu · 🙈 Craquage',
-  do: '💪 Fait · 🛋️ Pas fait',
+  avoid: dotted('😇 Nickel', '😬 Un peu', '🙈 Craquage'),
+  avoid_strict: dotted('😇 Nickel', '🙈 Craquage'),
+  do: dotted('💪 Fait', '🛋️ Pas fait'),
 }
 
 /** « dès lundi 23 nov. », « dès lundi 1er févr. » (jamais de coupure entre le numéro et le mois). */
@@ -87,11 +100,15 @@ function describeRaw(p: Proposal, ctx: DescribeContext): ProposalText {
     }
     case 'habit_kind': {
       const h = ctx.habits.find((x) => x.id === pl.habitId)
-      return {
-        emoji: '🔄',
-        title: `Passer ${h ? `${h.emoji} ${h.name}` : 'une habitude'} en « ${KIND_LABEL[pl.habitKind]} »`,
-        detail: KIND_SCALE[pl.habitKind],
+      const name = h ? `${h.emoji} ${h.name}` : 'une habitude'
+      // Entre « à éviter » et « tout ou rien », seul « Un peu » change : on le dit tel quel.
+      if (h && h.kind !== pl.habitKind && isAvoidKind(h.kind) && isAvoidKind(pl.habitKind)) {
+        const unPeu = `« ${dotted('😬 Un peu')} »`
+        return pl.habitKind === 'avoid_strict'
+          ? { emoji: '🔄', title: `Fini le ${unPeu} sur ${name}`, detail: `Tout ou rien : ${KIND_SCALE.avoid_strict}` }
+          : { emoji: '🔄', title: `Remettre ${unPeu} sur ${name}`, detail: KIND_SCALE.avoid }
       }
+      return { emoji: '🔄', title: `Passer ${name} en « ${KIND_LABEL[pl.habitKind]} »`, detail: KIND_SCALE[pl.habitKind] }
     }
     case 'weigh_day':
       return {

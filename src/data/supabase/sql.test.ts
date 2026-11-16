@@ -8,11 +8,20 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { DEFAULT_GAGES, DEFAULT_HABITS, DEFAULT_PLAYERS, SEASON_START } from '../../config/defaults'
 import { RULES, type Rules } from '../../config/rules'
 import { addDays, dayKeyAt, daysRange, isoDayOf, nextMonday, weekStartOf } from '../../core/dates'
-import { canEditCheckin, canWeighIn, isInGoalZone, percentChange, weighInPoints } from '../../core/scoring'
-import { isStakeEditable } from '../../core/season'
+import {
+  canEditCheckin,
+  canWeighIn,
+  checkinValueRefusal,
+  HABIT_KINDS,
+  isInGoalZone,
+  percentChange,
+  valuesFor,
+  weighInPoints,
+} from '../../core/scoring'
+import { buildSeason, isStakeEditable } from '../../core/season'
 import { BADGES } from '../../core/badges'
 import { drawStake } from '../../core/stake'
-import type { DayKey, DuelSnapshot, Habit, PlayerId, ProposalPayload, WeighInDayRule } from '../../core/types'
+import type { CheckinValue, DayKey, DuelSnapshot, Habit, HabitKind, PlayerId, ProposalPayload, WeighInDayRule } from '../../core/types'
 import { deriveWeighIns, type RawWeighIn } from '../../core/weight'
 import { DemoSource } from '../demo/DemoSource'
 import { maskChange, maskFromStart, maskGoalDistance, maskWeighIn, pctHalf, pctTenth } from '../mask'
@@ -30,6 +39,9 @@ const CODE = '123456'
 const NOT_MEMBER = SQLSTATE.notMember
 const RULE = SQLSTATE.rule
 const PERMISSION_DENIED = '42501'
+const NBSP = '\u00a0'
+/** Toutes les réponses de check-in possibles (le Record oblige à n'en oublier aucune). */
+const ALL_VALUES = Object.keys({ nickel: 1, unpeu: 1, craquage: 1, fait: 1, pasfait: 1 } satisfies Record<CheckinValue, 1>) as CheckinValue[]
 
 let t: TestDb
 
@@ -1000,6 +1012,12 @@ describe('Propositions', () => {
       habit_add: [{ payload: () => ({ kind: 'habit_add', name: 'Eau', emoji: '💧', hint: '1,5 L', habitKind: 'do' }), accept: true }],
       habit_disable: [{ payload: (h) => ({ kind: 'habit_disable', habitId: h('ongles') }), accept: true }],
       habit_kind: [{ payload: (h) => ({ kind: 'habit_kind', habitId: h('grignotage'), habitKind: 'do' }), accept: true }],
+      'habit_add tout ou rien': [
+        { payload: () => ({ kind: 'habit_add', name: 'Sucre', emoji: '🍬', hint: '', habitKind: 'avoid_strict' }), accept: true },
+      ],
+      'habit_kind vers tout ou rien': [{ payload: (h) => ({ kind: 'habit_kind', habitId: h('ongles'), habitKind: 'avoid_strict' }), accept: true }],
+      'habit_kind depuis tout ou rien': [{ payload: (h) => ({ kind: 'habit_kind', habitId: h('grignotage'), habitKind: 'avoid' }), accept: true }],
+      'habit_kind Sport à éviter': [{ payload: (h) => ({ kind: 'habit_kind', habitId: h('sport'), habitKind: 'avoid' }), accept: true }],
       'weigh_day (deux fois le même lundi)': [
         { payload: () => ({ kind: 'weigh_day', isoDay: 3 }), accept: true },
         { payload: () => ({ kind: 'weigh_day', isoDay: 5 }), accept: true },
@@ -1014,6 +1032,18 @@ describe('Propositions', () => {
       ],
     }
 
+    /**
+     * Le badge de l'habitude qui prend la suite (badgeKeyAfterKindChange) : il suit entre
+     * « à éviter » et « tout ou rien » (🔒 Frigo fermé compte toujours, précision 22), pas
+     * vers ou depuis « à faire ».
+     */
+    const BADGE_AFTER: Record<string, (string | null)[]> = {
+      habit_kind: [null],
+      'habit_kind vers tout ou rien': ['ongles'],
+      'habit_kind depuis tout ou rien': ['grignotage'],
+      'habit_kind Sport à éviter': [null],
+    }
+
     for (const [name, steps] of Object.entries(CASES)) {
       it(name, async () => {
         const expected = await demoEffects(steps)
@@ -1021,6 +1051,7 @@ describe('Propositions', () => {
         expect(actual).toEqual(expected)
         // Garde-fou : le cas produit bien quelque chose à comparer.
         expect(expected.proposals.length).toBe(steps.length)
+        if (name in BADGE_AFTER) expect(actual.added.map((h) => h.badgeKey)).toEqual(BADGE_AFTER[name])
       })
     }
   })
@@ -1233,7 +1264,7 @@ describe('Événements (public.events)', () => {
       t.rpc(arthus, 'set_checkin', { p_day: day, p_habit: habit, p_value: value })
     const from = await t.lastEventId()
     ok(await set(ongles, 'nickel'))
-    ok(await set(grignotage, 'unpeu'))
+    ok(await set(grignotage, 'nickel'))
     ok(await set(sport, 'fait')) // complet
     ok(await set(sport, 'pasfait')) // correction : déjà complet
     ok(await set(grignotage, null)) // effacé
@@ -1294,6 +1325,141 @@ describe('Événements (public.events)', () => {
     const before = await t.lastEventId()
     ok(await t.rpc(arthus, 'save_weigh_in', { p_day: '2026-12-06', p_kg: 77.7 }))
     expect(await kinds(before)).toEqual([{ player: A, kind: 'weighin', day: '2026-12-06' }])
+  })
+})
+
+// ─── Grignotage tout ou rien (précision 22) ────────────────────────────────
+
+describe('Habitudes « tout ou rien » (avoid_strict, précision 22)', () => {
+  /** Une habitude d'Arthus de ce type, active depuis le début (posée directement en base). */
+  async function habitOfKind(kind: HabitKind, name = `Test ${kind}`): Promise<string> {
+    const rows = await t.sql<{ id: string }>(
+      `insert into duel.habits (player_id, name, hint, emoji, kind, active_from, sort_order)
+       values ('arthus', $1, '', '🧪', $2, $3, 9) returning id::text as id`,
+      [name, kind, SEASON_START],
+    )
+    return rows[0].id
+  }
+
+  it('duel.checkin_values = valuesFor, pour chaque type (et null pour un type inconnu)', async () => {
+    for (const kind of HABIT_KINDS) {
+      const rows = await t.sql<{ v: string[] | null }>(`select duel.checkin_values($1) as v`, [kind])
+      expect(rows[0].v, kind).toEqual(valuesFor(kind))
+    }
+    for (const kind of ['maybe', 'AVOID', 'avoid strict', '', null]) {
+      expect((await t.sql<{ v: string[] | null }>(`select duel.checkin_values($1) as v`, [kind]))[0].v, String(kind)).toBeNull()
+    }
+  })
+
+  it('set_checkin accepté ⇔ valuesFor, refus avec le même message que checkinValueRefusal (donc que la maquette)', async () => {
+    await at('2026-11-25')
+    const arthus = await login(A)
+    for (const kind of HABIT_KINDS) {
+      const habit = { kind, name: `Test ${kind}` }
+      const id = await habitOfKind(kind, habit.name)
+      for (const value of ALL_VALUES) {
+        const from = await t.lastEventId()
+        const res = await t.rpc(arthus, 'set_checkin', { p_day: '2026-11-25', p_habit: id, p_value: value })
+        const refusal = checkinValueRefusal(habit, value)
+        expect(res.error === null, `${kind}/${value} : ${res.error?.message}`).toBe(refusal === null)
+        if (refusal) {
+          refused(res, RULE, refusal)
+          expect(await kinds(from), `${kind}/${value} : pas d'événement`).toEqual([])
+        }
+      }
+    }
+  })
+
+  it('Grignotage : Nickel et Craquage OK, « Un peu » refusé (message avec son nom), Ongles garde « Un peu »', async () => {
+    await at('2026-11-25', 21)
+    const arthus = await login(A)
+    const laetitia = await login(L)
+    const s = await snap(arthus)
+    expect(s.habits.filter((h) => h.badgeKey === 'grignotage').map((h) => [h.playerId, h.kind])).toEqual([
+      [L, 'avoid_strict'],
+      [A, 'avoid_strict'],
+    ])
+    const grignotage = habitId(s, A, 'grignotage')
+    const set = (uid: string, habit: string, value: CheckinValue | null) =>
+      t.rpc(uid, 'set_checkin', { p_day: '2026-11-25', p_habit: habit, p_value: value })
+    const message = (name: string) => `Pas de «${NBSP}un peu${NBSP}» pour ${name}${NBSP}: c’est Nickel ou Craquage 😉`
+    refused(await set(arthus, grignotage, 'unpeu'), RULE, message('Grignotage'))
+    ok(await set(arthus, grignotage, 'craquage'))
+    ok(await set(arthus, grignotage, 'nickel'))
+    refused(await set(arthus, grignotage, 'unpeu'), RULE, message('Grignotage'))
+    ok(await set(arthus, habitId(s, A, 'ongles'), 'unpeu'))
+    ok(await set(laetitia, habitId(s, L, 'grattage'), 'unpeu'))
+    refused(await set(laetitia, habitId(s, L, 'grignotage'), 'unpeu'), RULE, message('Grignotage'))
+    // Renommée dans l'app (cosmétique) : le message suit, le nom tel quel.
+    ok(await t.rpc(arthus, 'update_habit_look', { p_habit: grignotage, p_patch: { name: "Chips d'apéro" } }))
+    refused(await set(arthus, grignotage, 'unpeu'), RULE, message("Chips d'apéro"))
+    expect((await snap(arthus)).checkins.filter((c) => c.habitId === grignotage).map((c) => c.value)).toEqual(['nickel'])
+  })
+
+  it('un « Un peu » saisi avant le passage en tout ou rien reste, compte 5 pts, et se corrige (Nickel, Craquage, effacé)', async () => {
+    await at('2026-11-25', 21)
+    const arthus = await login(A)
+    const s = await snap(arthus)
+    const [ongles, grignotage, sport] = ['ongles', 'grignotage', 'sport'].map((k) => habitId(s, A, k))
+    // Comme sur la base d'Arthus : le « un peu » est déjà là (voir upgrade.test.ts pour le vrai chemin).
+    await t.sql(`insert into duel.checkins (player_id, habit_id, day, value) values ('arthus', $1, '2026-11-25', 'unpeu')`, [grignotage])
+    ok(await t.rpc(arthus, 'set_checkin', { p_day: '2026-11-25', p_habit: ongles, p_value: 'nickel' }))
+    ok(await t.rpc(arthus, 'set_checkin', { p_day: '2026-11-25', p_habit: sport, p_value: 'fait' }))
+    const day = () => snap(arthus).then((x) => buildSeason(x, '2026-11-25').current.scores[A].days[2])
+    expect(await day()).toMatchObject({ day: '2026-11-25', points: 25, possible: 30, score: 83, complete: true })
+    refused(await t.rpc(arthus, 'set_checkin', { p_day: '2026-11-25', p_habit: grignotage, p_value: 'unpeu' }), RULE)
+    expect((await day()).points).toBe(25)
+    ok(await t.rpc(arthus, 'set_checkin', { p_day: '2026-11-25', p_habit: grignotage, p_value: 'craquage' }))
+    expect((await day()).points).toBe(20)
+    ok(await t.rpc(arthus, 'set_checkin', { p_day: '2026-11-25', p_habit: grignotage, p_value: null }))
+    expect((await day())).toMatchObject({ points: 20, complete: false })
+  })
+
+  it('propositions : ajouter une habitude tout ou rien, ou y passer une habitude, effet le lundi suivant', async () => {
+    await at('2026-12-02')
+    const arthus = await login(A)
+    const laetitia = await login(L)
+    const s = await snap(arthus)
+    const ongles = habitId(s, A, 'ongles')
+    const ids = [
+      ok(await t.rpc(arthus, 'propose', { p_payload: { kind: 'habit_add', name: 'Sucre', emoji: '🍬', hint: '', habitKind: 'avoid_strict' } })),
+      ok(await t.rpc(arthus, 'propose', { p_payload: { kind: 'habit_kind', habitId: ongles, habitKind: 'avoid_strict' } })),
+    ]
+    expect((await snap(laetitia)).proposals.map((p) => p.payload)).toEqual([
+      { kind: 'habit_add', name: 'Sucre', emoji: '🍬', hint: '', habitKind: 'avoid_strict' },
+      { kind: 'habit_kind', habitId: ongles, habitKind: 'avoid_strict' },
+    ])
+    for (const id of ids) ok(await t.rpc(laetitia, 'answer_proposal', { p_id: id as string, p_accept: true }))
+    const after = (await snap(arthus)).habits.filter((h) => h.playerId === A && h.activeFrom === '2026-12-07')
+    // Ongles reste à éviter : son badge 💅 le suit (badgeKeyAfterKindChange) ; Sucre n'en a pas.
+    expect(after.map((h) => [h.name, h.kind, h.badgeKey])).toEqual([
+      ['Ongles', 'avoid_strict', 'ongles'],
+      ['Sucre', 'avoid_strict', null],
+    ])
+    // Types inconnus : refusés.
+    for (const habitKind of ['Avoid_strict', 'avoid strict', 'strict', 'unpeu']) {
+      refused(
+        await t.rpc(arthus, 'propose', { p_payload: { kind: 'habit_add', name: 'Eau', emoji: '💧', hint: '', habitKind } }),
+        RULE,
+        'Type d’habitude inconnu 🤔',
+      )
+    }
+  })
+
+  it('la contrainte des types est redéfinie à chaque exécution : une seule, habits_kind_check, avec les trois types', async () => {
+    const constraints = async () =>
+      t.sql<{ name: string; def: string }>(
+        `select conname::text as name, pg_get_constraintdef(oid) as def from pg_constraint
+         where conrelid = 'duel.habits'::regclass and contype = 'c' and pg_get_constraintdef(oid) like '%kind%'`,
+      )
+    const expected = [{ name: 'habits_kind_check', def: expect.stringMatching(/'avoid'.*'avoid_strict'.*'do'/) }]
+    expect(await constraints()).toEqual(expected)
+    await t.db.exec(MIGRATION_SQL)
+    expect(await constraints()).toEqual(expected)
+    const insert = (kind: string) =>
+      t.db.query(`insert into duel.habits (player_id, name, emoji, kind, active_from) values ('arthus', 'X', '🧪', $1, '2026-11-23')`, [kind])
+    await expect(insert('maybe')).rejects.toMatchObject({ code: '23514' })
+    for (const kind of HABIT_KINDS) await insert(kind)
   })
 })
 

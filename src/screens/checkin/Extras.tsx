@@ -118,7 +118,7 @@ export function UpcomingHabits({ habits }: { habits: Habit[] }) {
               {h.emoji}
             </span>
             <span className="min-w-0 flex-1 break-words text-ink-soft">{h.name}</span>
-            <span className="shrink-0 text-[14px]">{KIND_LABELS[h.kind]}</span>
+            <span className="max-w-[45%] shrink-0 text-right text-[14px] leading-snug">{KIND_LABELS[h.kind]}</span>
           </li>
         ))}
       </ul>

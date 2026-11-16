@@ -1,7 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import { RULES } from '../config/rules'
-import { BADGES, badgeUnlocksToRecord, badgesUnlockedOn, computeBadges, type BadgeId, type BadgeState } from './badges'
+import {
+  BADGES,
+  badgeKeyAfterKindChange,
+  badgeUnlocksToRecord,
+  badgesUnlockedOn,
+  computeBadges,
+  type BadgeId,
+  type BadgeState,
+} from './badges'
 import { addDays, weekEndOf } from './dates'
+import { isAvoidKind } from './scoring'
 import { buildSeason } from './season'
 import {
   A,
@@ -116,6 +125,29 @@ describe('💅 🧘 🔒 séries « nickel »', () => {
   })
 })
 
+describe('badgeKeyAfterKindChange : le badge suit un changement de type du même genre', () => {
+  it('« à éviter » ↔ « tout ou rien » : le badge suit (💅 🧘 🔒 comptent toujours les Nickel)', () => {
+    expect(badgeKeyAfterKindChange({ kind: 'avoid_strict', badgeKey: 'grignotage' }, 'avoid')).toBe('grignotage')
+    expect(badgeKeyAfterKindChange({ kind: 'avoid', badgeKey: 'ongles' }, 'avoid_strict')).toBe('ongles')
+    expect(badgeKeyAfterKindChange({ kind: 'do', badgeKey: 'sport' }, 'do')).toBe('sport')
+  })
+  it('vers ou depuis « à faire » : plus de badge', () => {
+    expect(badgeKeyAfterKindChange({ kind: 'avoid_strict', badgeKey: 'grignotage' }, 'do')).toBeNull()
+    expect(badgeKeyAfterKindChange({ kind: 'avoid', badgeKey: 'grattage' }, 'do')).toBeNull()
+    expect(badgeKeyAfterKindChange({ kind: 'do', badgeKey: 'sport' }, 'avoid')).toBeNull()
+    expect(badgeKeyAfterKindChange({ kind: 'do', badgeKey: 'sport' }, 'avoid_strict')).toBeNull()
+    expect(badgeKeyAfterKindChange({ kind: 'avoid', badgeKey: null }, 'avoid_strict')).toBeNull()
+  })
+  it('🔒 Frigo fermé compte les Nickel du Grignotage qui a repris « Un peu »', () => {
+    // Grignotage tout ou rien jusqu'au 2e lundi, puis la nouvelle habitude (« à éviter ») prend la suite.
+    const old = makeHabit('a-grignotage', A, 'avoid_strict', { badgeKey: 'grignotage', activeUntil: d(7) })
+    const fresh = makeHabit('a-grignotage-2', A, 'avoid', { badgeKey: badgeKeyAfterKindChange(old, 'avoid'), activeFrom: d(7) })
+    const list = [...habits.filter((h) => h.id !== 'a-grignotage'), old, fresh]
+    const b = badgesFor(A, { habits: list, checkins: fill(fresh, d(7), d(13)) }, d(13)).frigo
+    expect(b).toMatchObject({ applicable: true, unlocked: true, unlockedOn: d(13), progress: { current: 7, target: 7 } })
+  })
+})
+
 describe('🏋️ Machine', () => {
   const sport = H('a-sport')
   const W1 = weekOf(1)
@@ -150,7 +182,7 @@ describe('🏋️ Machine', () => {
 
 describe('📅 Assidu·e', () => {
   it('7 jours d’affilée avec un check-in complet (peu importe les réponses)', () => {
-    const checkins = fillPlayer(habits, A, d(0), d(6), (h) => (h.kind === 'avoid' ? 'craquage' : 'pasfait'))
+    const checkins = fillPlayer(habits, A, d(0), d(6), (h) => (isAvoidKind(h.kind) ? 'craquage' : 'pasfait'))
     expect(badgesFor(A, { checkins }, d(6)).assidu).toMatchObject({ unlocked: true, unlockedOn: d(6), count: 1 })
   })
   it('un jour passé incomplet casse la série', () => {
@@ -223,7 +255,7 @@ describe('🚀 Remontada', () => {
   const thu = addDays(W1, 3)
   const nextMonday = addDays(W1, 7)
   const nothingFor = (player: string, from: string, to: string): Checkin[] =>
-    fillPlayer(habits, player, from, to, (h) => (h.kind === 'avoid' ? 'craquage' : 'pasfait'))
+    fillPlayer(habits, player, from, to, (h) => (isAvoidKind(h.kind) ? 'craquage' : 'pasfait'))
 
   it('mené le jeudi soir puis vainqueur → débloqué le dimanche', () => {
     const checkins = [
@@ -311,6 +343,23 @@ describe('🔥 Inarrêtable', () => {
   it('pas de cumul entre deux habitudes : la meilleure série', () => {
     const checkins = [...fill(H('l-grignotage'), d(0), d(19)), ...fill(H('l-grattage'), d(5), d(19))]
     expect(badgesFor(L, { checkins }, d(19)).inarretable.progress).toEqual({ current: 20, target: N })
+  })
+  it('Grignotage « tout ou rien » est bien une habitude à éviter (précision 22)', () => {
+    expect(H('a-grignotage').kind).toBe('avoid_strict')
+    const b = badgesFor(A, { checkins: fill(H('a-grignotage'), d(0), d(N - 1)) }, d(N - 1)).inarretable
+    expect(b).toMatchObject({ unlocked: true, unlockedOn: d(N - 1), count: 1 })
+  })
+  it('passée en tout ou rien en cours de route (même habitude) : la série continue, un vieux « Un peu » la casse', () => {
+    // Le Grignotage d'Arthus, « à éviter » jusqu'ici, devient tout ou rien : même id, même historique.
+    const before = habits.map((h) => (h.id === 'a-grignotage' ? { ...h, kind: 'avoid' as const } : h))
+    const checkins = fill(H('a-grignotage'), d(0), d(N - 1))
+    const asAvoid = badgesFor(A, { habits: before, checkins }, d(N - 1)).inarretable
+    const asStrict = badgesFor(A, { checkins }, d(N - 1)).inarretable
+    expect(asStrict).toEqual(asAvoid)
+    expect(asStrict.unlocked).toBe(true)
+    // Un « Un peu » saisi avant le changement n'est pas un Nickel : il casse la série.
+    const withUnpeu = [...fill(H('a-grignotage'), d(0), d(9)), ci(A, 'a-grignotage', d(10), 'unpeu'), ...fill(H('a-grignotage'), d(11), d(15))]
+    expect(badgesFor(A, { checkins: withUnpeu }, d(15)).inarretable.progress.current).toBe(5)
   })
   it('marche aussi avec une habitude perso (ex. 🍷 Alcool)', () => {
     const wine: Habit = makeHabit('l-alcool', L, 'avoid', { name: 'Alcool', emoji: '🍷' })

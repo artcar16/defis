@@ -4,9 +4,19 @@
  * Tient les garanties de DuelSource (voir l'en-tête de source.ts).
  */
 import { RULES } from '../../config/rules'
+import { badgeKeyAfterKindChange } from '../../core/badges'
 import { addDays, atSameTimeOn, dayKeyAt, daysRange, nextMonday, weekEndOf, weekStartOf } from '../../core/dates'
 import { typo } from '../../core/fr'
-import { activeHabits, canEditCheckin, canWeighIn, isWeighInDay, percentChange, valuesFor } from '../../core/scoring'
+import {
+  activeHabits,
+  canEditCheckin,
+  canWeighIn,
+  checkinValueRefusal,
+  isHabitKind,
+  isWeighInDay,
+  percentChange,
+  valuesFor,
+} from '../../core/scoring'
 import { isStakeEditable } from '../../core/season'
 import { drawStake } from '../../core/stake'
 import type {
@@ -350,6 +360,10 @@ export class DemoSource implements DuelSource, DemoControls {
     const habit = this.state.habits.find((h) => h.id === habitId && h.playerId === this.state.meId)
     if (!habit) throw new Error('Habitude inconnue 🤔')
     if (!canEditCheckin(day, this.today, this.state.settings)) throw new Error('Ce jour n’est plus modifiable 🔒')
+    // Une réponse de son type (valuesFor) : pas de « Un peu » sur une habitude tout ou rien,
+    // avec le même message que le serveur (set_checkin).
+    const refusal = checkinValueRefusal(habit, value)
+    if (refusal) throw new Error(refusal)
     this.upsertCheckin(this.state.meId, habitId, day, value)
     this.commit()
   }
@@ -380,6 +394,10 @@ export class DemoSource implements DuelSource, DemoControls {
   }
 
   async propose(payload: ProposalPayload): Promise<void> {
+    // Comme le serveur (propose) : un type d'habitude connu (avoid, avoid_strict ou do).
+    if ((payload.kind === 'habit_add' || payload.kind === 'habit_kind') && !isHabitKind(payload.habitKind)) {
+      throw new Error('Type d’habitude inconnu 🤔')
+    }
     const me = this.state.meId
     const at = new Date().toISOString()
     // Une seule proposition en attente par sujet : la nouvelle remplace l'ancienne (décision 17).
@@ -444,11 +462,13 @@ export class DemoSource implements DuelSource, DemoControls {
       this.state.habits = this.state.habits.map((h) => (h.id === pl.habitId && h.activeUntil === null ? { ...h, activeUntil: from } : h))
     } else if (pl.kind === 'habit_kind') {
       // On clôt l'ancienne habitude et on en crée une nouvelle : l'historique garde son type.
-      // Rien si elle est déjà close.
+      // Rien si elle est déjà close. Le badge suit si elle reste du même genre (« à éviter »
+      // ↔ « tout ou rien ») : badgeKeyAfterKindChange.
       const old = this.state.habits.find((h) => h.id === pl.habitId && h.activeUntil === null)
       if (!old) return
       this.state.habits = this.state.habits.map((h) => (h.id === old.id ? { ...h, activeUntil: from } : h))
-      const fresh: Habit = { ...old, id: uid(), kind: pl.habitKind, badgeKey: null, activeFrom: from, activeUntil: null }
+      const badgeKey = badgeKeyAfterKindChange(old, pl.habitKind)
+      const fresh: Habit = { ...old, id: uid(), kind: pl.habitKind, badgeKey, activeFrom: from, activeUntil: null }
       this.state.habits.push(fresh)
     } else if (pl.kind === 'weigh_day') {
       this.state.settings.weighInDays = [...this.state.settings.weighInDays.filter((r) => r.from !== from), { from, isoDay: pl.isoDay }]
@@ -570,9 +590,10 @@ export class DemoSource implements DuelSource, DemoControls {
     const other = this.otherId
     const rng = makeRng(Date.now() % 100000)
     for (const h of activeHabits(this.state.habits, other, this.today)) {
+      // Seulement les réponses de son type : jamais de « Un peu » sur une habitude tout ou rien.
       const values = valuesFor(h.kind)
       const r = rng()
-      const value = h.kind === 'avoid' ? (r < 0.6 ? values[0] : r < 0.85 ? values[1] : values[2]) : r < 0.65 ? values[0] : values[1]
+      const value = values.length === 3 ? (r < 0.6 ? values[0] : r < 0.85 ? values[1] : values[2]) : r < 0.65 ? values[0] : values[1]
       this.upsertCheckin(other, h.id, this.today, value)
     }
     this.commit(makeActivity('checkin_done', other, this.nameOf(other)))

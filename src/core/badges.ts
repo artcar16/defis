@@ -11,7 +11,8 @@
  * - 🚀 Remontada : gagner une manche terminée en étant strictement mené·e au
  *   total le jeudi soir.
  * - 👑 Série royale : N manches terminées gagnées d'affilée (une égalité casse la série).
- * - 🔥 Inarrêtable : N jours d'affilée « Nickel » sur une même habitude à éviter.
+ * - 🔥 Inarrêtable : N jours d'affilée « Nickel » sur une même habitude à éviter (avec
+ *   « Un peu » ou tout ou rien).
  *
  * Seuls les jours jusqu'à aujourd'hui comptent, à partir du lundi de la première manche.
  * Un badge débloqué le reste (décision 13) : le calcul est fusionné avec
@@ -21,10 +22,10 @@
  */
 import { RULES, type Rules } from '../config/rules'
 import { addDays, isoDayName, weekDays, weekStartOf } from './dates'
-import { canEditCheckin, checkinKey, isHabitActiveOn, playerWeekScore, type CheckinIndex } from './scoring'
+import { canEditCheckin, checkinKey, isAvoidKind, isHabitActiveOn, playerWeekScore, type CheckinIndex } from './scoring'
 import type { Season } from './season'
 import { checkinJudge, habitJudge, scanStreak } from './streaks'
-import type { BadgeHabitKey, BadgeUnlock, DayKey, DuelSnapshot, Habit, PlayerId } from './types'
+import type { BadgeHabitKey, BadgeUnlock, DayKey, DuelSnapshot, Habit, HabitKind, PlayerId } from './types'
 import { formatPct, weighInsOf } from './weight'
 
 export type BadgeId =
@@ -197,6 +198,17 @@ function streakBadge(ctx: BadgeContext, id: BadgeId, habits: Habit[], target: nu
   return finish(ctx, id, target, days, current)
 }
 
+/**
+ * Le badge d'une habitude qui change de type (proposition habit_kind acceptée : l'ancienne
+ * est close, une nouvelle prend la suite). Il la suit tant qu'elle reste du même genre :
+ * « à éviter » ↔ « tout ou rien » (💅 🧘 🔒 comptent toujours ses jours Nickel, précision 22),
+ * ou « à faire » ↔ « à faire ». Vers ou depuis « à faire », il n'a plus de sens : aucun.
+ * Même règle que duel.decide (supabase/migrations/0001_duel.sql).
+ */
+export function badgeKeyAfterKindChange(habit: Pick<Habit, 'kind' | 'badgeKey'>, kind: HabitKind): BadgeHabitKey | null {
+  return isAvoidKind(habit.kind) === isAvoidKind(kind) ? habit.badgeKey : null
+}
+
 function cleanStreak(ctx: BadgeContext, id: BadgeId, key: BadgeHabitKey): BadgeResult {
   return streakBadge(
     ctx,
@@ -316,7 +328,8 @@ function inarretable(ctx: BadgeContext): BadgeResult {
   return streakBadge(
     ctx,
     'inarretable',
-    ctx.habits.filter((h) => h.kind === 'avoid'),
+    // À éviter, avec ou sans « Un peu » (tout ou rien) : Nickel = jour réussi.
+    ctx.habits.filter((h) => isAvoidKind(h.kind)),
     ctx.rules.badges.unstoppableDays,
   )
 }

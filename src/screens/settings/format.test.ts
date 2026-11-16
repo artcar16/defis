@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { RULES } from '../../config/rules'
 import { NBSP } from '../../core/fr'
-import type { Proposal, ProposalPayload } from '../../core/types'
+import type { Habit, HabitKind, Proposal, ProposalPayload } from '../../core/types'
 import { KG_RANGE_ERROR, describeProposal, fromLabel, parseKg } from './format'
 
 const ctx = { meId: 'arthus', habits: [], currentWeighDay: 7 }
@@ -54,5 +54,48 @@ describe('describeProposal : objectif de poids', () => {
     ]
     const t = describeProposal(proposal('laetitia', { kind: 'habit_kind', habitId: 'h1', habitKind: 'do' }), { ...ctx, habits })
     expect(t.title).toBe(`Passer 💅 Ongles en «${NBSP}à faire${NBSP}»`)
+  })
+})
+
+describe('describeProposal : tout ou rien', () => {
+  const habit = (kind: HabitKind): Habit => ({
+    id: 'h1',
+    playerId: 'arthus',
+    name: 'Grignotage',
+    hint: '',
+    emoji: '🍪',
+    kind,
+    badgeKey: 'grignotage',
+    activeFrom: '2026-11-16',
+    activeUntil: null,
+    sortOrder: 1,
+  })
+  const kindChange = (from: HabitKind, to: HabitKind) =>
+    describeProposal(proposal('arthus', { kind: 'habit_kind', habitId: 'h1', habitKind: to }), { ...ctx, habits: [habit(from)] })
+
+  it('à éviter → tout ou rien : on dit que « Un peu » disparaît', () => {
+    const t = kindChange('avoid', 'avoid_strict')
+    expect(t.title).toBe(`Fini le «${NBSP}😬${NBSP}Un${NBSP}peu${NBSP}» sur 🍪 Grignotage`)
+    expect(t.detail).toBe(`Tout ou rien${NBSP}: 😇${NBSP}Nickel${NBSP}· 🙈${NBSP}Craquage`)
+  })
+
+  it('tout ou rien → à éviter : « Un peu » revient', () => {
+    const t = kindChange('avoid_strict', 'avoid')
+    expect(t.title).toBe(`Remettre «${NBSP}😬${NBSP}Un${NBSP}peu${NBSP}» sur 🍪 Grignotage`)
+    expect(t.detail).toBe(`😇${NBSP}Nickel${NBSP}· 😬${NBSP}Un${NBSP}peu${NBSP}· 🙈${NBSP}Craquage`)
+  })
+
+  it('vers ou depuis « à faire » : le nom du type et ses réponses', () => {
+    expect(kindChange('do', 'avoid_strict').title).toBe(`Passer 🍪 Grignotage en «${NBSP}à${NBSP}éviter${NBSP}· tout${NBSP}ou${NBSP}rien${NBSP}»`)
+    expect(kindChange('do', 'avoid_strict').detail).toBe(`😇${NBSP}Nickel${NBSP}· 🙈${NBSP}Craquage`)
+    expect(kindChange('avoid_strict', 'do').title).toBe(`Passer 🍪 Grignotage en «${NBSP}à faire${NBSP}»`)
+  })
+
+  it('nouvelle habitude tout ou rien : le type est dit en entier', () => {
+    const t = describeProposal(
+      proposal('laetitia', { kind: 'habit_add', name: 'Alcool', emoji: '🍷', hint: '', habitKind: 'avoid_strict' }),
+      ctx,
+    )
+    expect(t.detail).toBe(`🙅 À${NBSP}éviter${NBSP}· tout${NBSP}ou${NBSP}rien`)
   })
 })

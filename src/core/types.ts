@@ -7,8 +7,12 @@ export type DayKey = string
 
 export type PlayerId = string
 
-/** 'avoid' = à éviter (3 états), 'do' = à faire (2 états). */
-export type HabitKind = 'avoid' | 'do'
+/**
+ * 'avoid' = à éviter (3 états : Nickel, Un peu, Craquage) ;
+ * 'avoid_strict' = à éviter, tout ou rien (2 états : Nickel ou Craquage, pas de « Un peu ») ;
+ * 'do' = à faire (2 états : Fait, Pas fait).
+ */
+export type HabitKind = 'avoid' | 'avoid_strict' | 'do'
 
 export type AvoidValue = 'nickel' | 'unpeu' | 'craquage'
 export type DoValue = 'fait' | 'pasfait'

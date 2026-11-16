@@ -21,6 +21,7 @@ import resetSql from '../../../supabase/remise-a-zero.sql?raw'
 import { DEFAULT_HABITS, DEFAULT_PLAYERS, SEASON_START } from '../../config/defaults'
 import { RULES } from '../../config/rules'
 import { isoDayOf } from '../../core/dates'
+import { isAvoidKind } from '../../core/scoring'
 import type { DayKey, DuelSnapshot, Habit, PlayerId, ProposalPayload } from '../../core/types'
 import type { Activity } from '../source'
 import { SQLSTATE, type EventRow, type RpcName } from './api'
@@ -219,7 +220,7 @@ async function fillDuel(): Promise<Phones> {
   await at('2026-11-23', 21)
   for (const [uid, player] of [[arthus, A], [laetitia, L]] as const) {
     for (const h of s.habits.filter((x) => x.playerId === player)) {
-      ok(await t.rpc(uid, 'set_checkin', { p_day: '2026-11-23', p_habit: h.id, p_value: h.kind === 'avoid' ? 'nickel' : 'fait' }))
+      ok(await t.rpc(uid, 'set_checkin', { p_day: '2026-11-23', p_habit: h.id, p_value: isAvoidKind(h.kind) ? 'nickel' : 'fait' }))
     }
   }
   ok(await t.rpc(arthus, 'set_stake', { p_week: '2026-11-23', p_stake: 'Massage de 15 min 💆' }))

@@ -133,6 +133,46 @@ le bon code. Depuis un téléphone déjà connecté : *Réglages* › *Mon compt
 prénom** (l’app dit combien de codes faux ont été tapés : si ce n’était pas vous, changez de
 code). Sinon, dans le SQL Editor : `delete from duel.code_failures where player_id = 'arthus';`
 
+### 🔄 Mettre à jour la base
+
+Quand l’app change (nouvelle règle, correctif), la base suit en relançant **le même script
+qu’à l’étape 2** : Supabase › **SQL Editor** › **New query**, colle **tout**
+[`supabase/migrations/0001_duel.sql`](supabase/migrations/0001_duel.sql) (sur GitHub :
+*Copy raw file*), **Run**. Résultat attendu : *Success. No rows returned*.
+
+C’est sans risque : il met à jour les fonctions et les règles, et ne touche **à aucune de vos
+données** (check-ins, pesées, habitudes, codes, téléphones connectés…). Personne n’a à retaper
+son code. Quand une mise à jour doit aussi changer vos données, elle a son petit script à
+lancer **juste après**, décrit ci-dessous.
+
+#### 🍪 Grignotage « tout ou rien » (16 novembre 2026)
+
+Décidé par Arthus (précision 22 du [SPEC.md](SPEC.md)) : sur Grignotage, plus de « 😬 Un peu »,
+seulement « 😇 Nickel » (10 pts) ou « 🙈 Craquage » (0 pt), pour Laetitia **et** Arthus, dès
+aujourd’hui. Ongles, Grattage et Sport ne changent pas.
+
+**Dans cet ordre : l’app d’abord, la base ensuite.**
+
+0. **La nouvelle version de l’app, sur les deux téléphones.** Dans Vercel › *Deployments*,
+   le déploiement de cette version (le dernier commit poussé sur GitHub) doit être *Ready*.
+   Puis, sur **chaque** téléphone (et tablette…), ferme complètement l’app (balaye-la hors des
+   apps ouvertes) et rouvre-la : en bas des *Réglages*, la *Version du …* doit être celle de
+   ce déploiement (même date, même commit que dans Vercel). Une app restée à l’ancienne
+   version ne saurait plus remplir Grignotage une fois la base passée en tout ou rien : elle
+   afficherait 💪 Fait / 🛋️ Pas fait, et la base refuserait ces réponses.
+1. Relance `supabase/migrations/0001_duel.sql` **en entier** (juste au-dessus).
+2. **New query** : colle **tout**
+   [`supabase/grignotage-tout-ou-rien.sql`](supabase/grignotage-tout-ou-rien.sql), puis **Run**.
+3. Résultat attendu : *« ✅ Grignotage : Nickel ou Craquage, pour Laetitia et Arthus »*.
+
+Un « Un peu » déjà noté (même ce soir) garde ses 5 pts : on ne peut simplement plus en choisir
+de nouveau. Un téléphone qui a la nouvelle version (étape 0) passe en tout ou rien tout seul,
+sans notification : tout de suite si l’app est ouverte, sinon dès qu’on y revient. Si un
+téléphone affiche quand même 💪 Fait / 🛋️ Pas fait sur Grignotage, il a gardé l’ancienne
+version : ferme complètement l’app et rouvre-la. On peut relancer le script sans risque. S’il
+répond *« Relance d’abord supabase/migrations/0001_duel.sql en entier… »*, c’est que l’étape 1
+manque : rien n’a été changé, fais-la puis relance-le.
+
 ### 🧹 Tout remettre à zéro
 
 > **Tu vois une « Manche 4 », ou des points que personne n’a marqués ?** Ce n’est pas ta
@@ -141,7 +181,10 @@ code). Sinon, dans le SQL Editor : `delete from duel.code_failures where player_
 > des *Réglages*, tu dois lire *🔌 Branchée à Supabase · xxxx.supabase.co*.
 
 Pour repartir sur un duel tout propre : après des essais, ou pour changer la date de début.
-Pas besoin de relancer le gros script de l’étape 2.
+Pas besoin de relancer le gros script de l’étape 2 (sauf si le script le demande : ta base date
+alors d’une version d’avant, voir *Mettre à jour la base*). Ce script remet Grignotage en
+« tout ou rien » : les téléphones doivent déjà avoir une version de l’app qui le connaît
+(étape 0 de *Grignotage « tout ou rien »*, juste au-dessus).
 
 1. Ouvre le fichier [`supabase/remise-a-zero.sql`](supabase/remise-a-zero.sql) de ce dépôt
    et copie **tout** son contenu (sur GitHub : bouton *Copy raw file*).
@@ -200,7 +243,8 @@ maquette ; sur le site déployé, jamais en douce : sans les variables, elle aff
 - *« Clé Supabase refusée »* : la variable `VITE_SUPABASE_PUBLISHABLE_KEY` (ou l’URL) est
   fausse sur Vercel : recopie la **Publishable key** (`sb_publishable_…`, jamais la *secret*),
   puis **Redeploy** (étape 4).
-- *« Le serveur a répondu une erreur »* : relance le script SQL (étape 2), il ne casse rien.
+- *« Le serveur a répondu une erreur »* : relance le script SQL (étape 2, voir *Mettre à jour la
+  base*), il ne casse rien.
 - *« 🔌 L’app n’est pas encore branchée à ta base »* : le site déployé n’a pas reçu
   l’URL ou la clé. L’écran dit laquelle manque (✅ / ❌, les noms seulement). Le plus
   souvent : les variables ont été ajoutées **sans redéployer**, ou leur nom diffère un peu.

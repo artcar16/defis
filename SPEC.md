@@ -33,11 +33,11 @@ Cinq habitudes au départ, toutes modifiables dans l'app.
 | --- | --- | --- | --- |
 | 💅 Ongles (ne pas se les ronger) | Arthus | À éviter | Chaque jour |
 | 🦟 Grattage (ne pas se gratter) | Laetitia | À éviter | Chaque jour |
-| 🍪 Grignotage (en dehors des repas) | Les deux | À éviter | Chaque jour |
+| 🍪 Grignotage (en dehors des repas) | Les deux | À éviter, tout ou rien (précision 22) | Chaque jour |
 | 🏃 Sport (30 min d'activité minimum) | Les deux | À faire | Chaque jour |
 | ⚖️ Poids | Les deux | Pesée | Une fois par semaine |
 
-Chacun peut ajouter, renommer ou désactiver une habitude et choisir son emoji (idées : 💧 eau, 🍷 alcool, 😴 sommeil). Une modification ne s'applique qu'à partir du lundi suivant : pas de changement de règles en cours de manche.
+Chacun peut ajouter, renommer ou désactiver une habitude et choisir son emoji (idées : 💧 eau, 🍷 alcool, 😴 sommeil). Une modification ne s'applique qu'à partir du lundi suivant : pas de changement de règles en cours de manche (seule exception, décidée ensemble : Grignotage « tout ou rien », précision 22).
 
 ## Règles du jeu
 
@@ -52,6 +52,7 @@ Une semaine, du lundi 00:00 au dimanche 23:59, heure de Paris (`Europe/Paris`).
 Pour chaque habitude :
 
 - **À éviter** : 😇 Nickel = 10 pts · 😬 Un peu = 5 pts · 🙈 Craquage = 0 pt.
+- **À éviter, tout ou rien** (Grignotage, précision 22) : 😇 Nickel = 10 pts · 🙈 Craquage = 0 pt, pas de « Un peu ».
 - **À faire** : 💪 Fait = 10 pts · 🛋️ Pas fait = 0 pt.
 - **Score du jour** = points obtenus ÷ points possibles × 100. Chacun a donc un score sur 100, même avec un nombre d'habitudes différent.
 - On peut remplir ou corriger **aujourd'hui et hier** (en cas d'oubli), rien avant. Une habitude non remplie vaut 0 pt, donc un jour oublié vaut 0.
@@ -89,7 +90,7 @@ Navigation par une barre d'onglets en bas : **Ring, Check-in, Stats, Badges, Ré
 
 ### 2. Check-in du jour
 
-- Une carte par habitude, avec de gros boutons emoji : 3 états pour « à éviter », 2 pour « à faire ».
+- Une carte par habitude, avec de gros boutons emoji : 3 états pour « à éviter », 2 pour « à éviter, tout ou rien » et pour « à faire ».
 - Rebond au tap, score du jour qui monte en direct, confettis si la journée est parfaite.
 - Une bascule « Aujourd'hui / Hier » pour rattraper un oubli.
 
@@ -209,6 +210,7 @@ _Points tranchés pendant le projet. Ils complètent (et priment sur) les sectio
 3. **Pesée le jour J uniquement** : on ne peut se peser que le jour de la pesée, et corriger jusqu'à 23:59 ce jour-là. Pas de pesée = 0 pt ; la suivante se compare à la dernière pesée existante. La pesée de départ suit la même règle.
 4. **Enjeu de la semaine** : chaque lundi, la roulette 🎲 tire automatiquement un gage dans la liste. Chacun peut le remplacer (texte libre ou nouveau tirage) jusqu'au lundi 23:59 ; ensuite il est verrouillé jusqu'à la fin de la manche.
 20. **Pas de comptes : prénom + code** : la première fois sur un téléphone, on touche son prénom et on tape un code à 6 chiffres (le tout premier code tapé pour un prénom devient le sien). Le téléphone reste connecté ensuite. Le code se change dans les Réglages : le téléphone qui le change reste connecté, les autres appareils du joueur sont déconnectés. « Se déconnecter » oublie ce téléphone. Après 10 codes faux en 15 minutes sur un prénom, il faut attendre 15 minutes (même avec le bon code) ; un bon code remet le compteur à zéro, et « Débloquer mon prénom » (depuis un téléphone déjà connecté) lève le blocage. Code oublié : une ligne dans le SQL Editor de Supabase (`duel.reset_code`), qui pose le nouveau code et déconnecte tous ses téléphones. Conseillé : poser les deux codes ainsi dès l'installation, pour que personne ne puisse « prendre » un prénom avant vous.
+22. **Grignotage tout ou rien** (décidé par Arthus le 16/11/2026) : un nouveau type d'habitude, « à éviter, tout ou rien » : seulement 😇 Nickel (10 pts) ou 🙈 Craquage (0 pt), sans « 😬 Un peu ». Grignotage l'est pour les deux joueurs (chacun sa copie). Appliqué **tout de suite**, dès le lundi 16 novembre (1er jour du duel), sans passer par une proposition : exception à la décision 2, décidée ensemble. Un « Un peu » déjà saisi garde ses 5 pts ; on ne peut simplement plus en choisir de nouveau. Ça reste une habitude à éviter : 🔒 Frigo fermé et 🔥 Inarrêtable comptent ses jours Nickel. Ongles et Grattage gardent « Un peu ». Pour la suite, passer une habitude en « tout ou rien » (ou l'inverse), ou en ajouter une, est un changement de type comme un autre (décision 2 : proposition, effet le lundi suivant) ; son badge (💅 🧘 🔒) la suit tant qu'elle reste à éviter, avec ou sans « Un peu » (passée « à faire », ou l'inverse, elle n'en a plus). Base déjà installée : d'abord déployer la nouvelle version de l'app et la rouvrir sur les deux téléphones (l'ancienne ne saurait plus remplir Grignotage), puis relancer `supabase/migrations/0001_duel.sql`, puis `supabase/grignotage-tout-ou-rien.sql` (README, « Mettre à jour la base »).
 
 ### Précisions ajoutées par Claude (à contester si besoin)
 
@@ -240,3 +242,4 @@ _Points tranchés pendant le projet. Ils complètent (et priment sur) les sectio
 | 2026-11-16 | Base Supabase branchée (script SQL, temps réel). Après relecture de sécurité : décision 20 complétée (changer son code déconnecte ses autres appareils, déblocage, `duel.reset_code`), précisions 17 et 18 complétées (habitude = un seul sujet, % arrondis pour l'autre). |
 | 2026-11-16 | Script `supabase/remise-a-zero.sql` pour tout remettre à zéro depuis le SQL Editor : historique du jeu effacé, habitudes, jour de pesée et date de début (un lundi, pas dans le passé) remis au départ ; joueurs, codes, téléphones connectés et liste des gages gardés. |
 | 2026-11-16 | Précision 21 : jamais de maquette par erreur (écran « pas branchée », pastille Maquette, noms NEXT_PUBLIC_… acceptés). |
+| 2026-11-16 | Précision 22, décidée par Arthus : Grignotage « tout ou rien » (Nickel ou Craquage, plus de « Un peu ») pour les deux, dès le 16/11, sans proposition ; un « Un peu » déjà saisi garde ses points. Script `supabase/grignotage-tout-ou-rien.sql` pour la base déjà installée, à lancer une fois la nouvelle version de l'app déployée et rouverte. Un changement de type entre « à éviter » et « tout ou rien » garde le badge de l'habitude. |

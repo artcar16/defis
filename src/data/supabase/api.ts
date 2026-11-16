@@ -130,7 +130,11 @@ export interface DuelRpc {
    * Remplit / corrige (p_value null = efface) une de SES habitudes. Refus P0001 si le jour
    * n'est pas modifiable (canEditCheckin de core/scoring.ts, avec duel.today()), si
    * l'habitude n'est pas à lui ou pas active ce jour-là (isHabitActiveOn), ou si la valeur
-   * ne va pas avec le type (avoid : nickel|unpeu|craquage ; do : fait|pasfait).
+   * ne va pas avec le type (valuesFor de core/scoring.ts, duel.checkin_values côté SQL :
+   * avoid : nickel|unpeu|craquage ; avoid_strict : nickel|craquage ; do : fait|pasfait).
+   * Un « unpeu » sur une habitude avoid_strict (tout ou rien) a son propre message, le même
+   * que checkinValueRefusal : « Pas de « un peu » pour <nom> : c’est Nickel ou Craquage 😉 ».
+   * Un « unpeu » enregistré avant qu'une habitude passe en tout ou rien reste en place.
    * Événement 'checkin', ou 'checkin_done' quand le jour devient complet (toutes les
    * habitudes actives remplies) alors qu'il ne l'était pas.
    */
@@ -153,7 +157,9 @@ export interface DuelRpc {
    * Nouvelle proposition (garantie 6) : annule (status 'cancelled') la proposition en
    * attente du même auteur sur le même sujet (sameSubject de DemoSource.ts : habit_disable
    * et habit_kind sur une même habitude sont UN sujet), puis insère.
-   * Les habitudes visées doivent être à l'auteur et encore actives. goal_weight : goalKg
+   * Les habitudes visées doivent être à l'auteur et encore actives. habit_add / habit_kind :
+   * habitKind = 'avoid' | 'avoid_strict' | 'do' (HabitKind), sinon P0001 « Type d’habitude
+   * inconnu 🤔 » ; decide le reprend tel quel. goal_weight : goalKg
    * (si !clear) entre min_kg et max_kg, rangé dans une table privée (jamais dans payload) ;
    * le serveur recalcule goalFromStartPct depuis la 1re pesée (null sans pesée), au demi-%.
    * Acceptée d'office seulement si duel.rules.require_approval est faux (jamais sur demande
@@ -165,8 +171,9 @@ export interface DuelRpc {
    * effectiveFrom = lundi suivant (nextMonday de core/dates.ts sur duel.today()) et effets
    * comme DemoSource.decide : habit_add (nouvelle habitude, sortOrder max+1, badgeKey null),
    * habit_disable (activeUntil = lundi), habit_kind (ferme l'ancienne, crée la nouvelle avec
-   * le nouveau type, badgeKey null), weigh_day (règle {from: lundi, isoDay}, remplace une
-   * règle au même lundi), goal_weight (objectif {from: lundi, kg} ou null si clear).
+   * le nouveau type ; badgeKey : badgeKeyAfterKindChange de core/badges.ts), weigh_day
+   * (règle {from: lundi, isoDay}, remplace une règle au même lundi), goal_weight (objectif
+   * {from: lundi, kg} ou null si clear).
    * Accepter habit_disable / habit_kind sur une habitude déjà close : P0001 « Cette habitude
    * est déjà désactivée 🤷 » (on peut toujours la refuser).
    * Événement 'proposal_accepted' / 'proposal_refused'.

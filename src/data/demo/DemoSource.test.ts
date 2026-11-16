@@ -1,12 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { RULES } from '../../config/rules'
-import { dailyScore, indexCheckins, canEditCheckin } from '../../core/scoring'
+import { computeBadges } from '../../core/badges'
+import { canEditCheckin, checkinValueRefusal, dailyScore, indexCheckins, isAvoidKind, valuesFor } from '../../core/scoring'
 import { buildSeason, pendingResultsWeek } from '../../core/season'
 import { drawStake } from '../../core/stake'
 import type { DuelSnapshot, ProposalPayload } from '../../core/types'
 import type { Activity } from '../source'
 import { DemoSource } from './DemoSource'
-import type { DemoState } from './generate'
+import { DEMO_VERSION, type DemoState } from './generate'
 
 /** Horloge fixe : le lundi 16 novembre 2026, midi à Paris. */
 const clock = () => new Date('2026-11-16T11:00:00Z')
@@ -78,7 +79,7 @@ describe('DemoSource · voyage dans le temps', () => {
   it('en avant, garde mes check-ins et n’invente que les jours manquants (hier incomplet pour moi)', async () => {
     const src = make('?reset=1&as=arthus')
     const habits = src.getSnapshot().habits.filter((h) => h.playerId === 'arthus')
-    for (const h of habits) await src.setCheckin('2026-11-16', h.id, h.kind === 'avoid' ? 'craquage' : 'pasfait')
+    for (const h of habits) await src.setCheckin('2026-11-16', h.id, isAvoidKind(h.kind) ? 'craquage' : 'pasfait')
     const before = checkinsOf(src.getSnapshot(), 'arthus', '2026-11-16').map((c) => `${c.habitId}=${c.value}`).sort()
 
     src.setToday('2026-11-18')
@@ -185,6 +186,119 @@ describe('DemoSource · propositions', () => {
     } finally {
       RULES.proposals.requireApproval = saved
     }
+  })
+})
+
+describe('DemoSource · Grignotage tout ou rien (précision 22)', () => {
+  const habitOf = (src: DemoSource, player: string, badgeKey: string) =>
+    src.getSnapshot().habits.find((h) => h.playerId === player && h.badgeKey === badgeKey && h.activeUntil === null)!
+
+  it('les deux Grignotage sont tout ou rien, Ongles et Grattage gardent « Un peu »', () => {
+    const snap = make().getSnapshot()
+    const kinds = Object.fromEntries(snap.habits.map((h) => [h.id, h.kind]))
+    expect(kinds).toEqual({
+      'laetitia-grattage': 'avoid',
+      'laetitia-grignotage': 'avoid_strict',
+      'laetitia-sport': 'do',
+      'arthus-ongles': 'avoid',
+      'arthus-grignotage': 'avoid_strict',
+      'arthus-sport': 'do',
+    })
+  })
+
+  it('« Un peu » refusé sur Grignotage (même message que le serveur), Nickel et Craquage acceptés', async () => {
+    const src = make()
+    const snacks = habitOf(src, 'arthus', 'grignotage')
+    const day = '2026-11-16'
+    await expect(src.setCheckin(day, snacks.id, 'unpeu')).rejects.toThrow(
+      'Pas de « un peu » pour Grignotage : c’est Nickel ou Craquage 😉',
+    )
+    expect(checkinsOf(src.getSnapshot(), 'arthus', day).filter((c) => c.habitId === snacks.id)).toEqual([])
+    await src.setCheckin(day, snacks.id, 'craquage')
+    await src.setCheckin(day, snacks.id, 'nickel')
+    // Refusé : la réponse d'avant reste.
+    await expect(src.setCheckin(day, snacks.id, 'unpeu')).rejects.toThrow(checkinValueRefusal(snacks, 'unpeu')!)
+    await expect(src.setCheckin(day, snacks.id, 'fait')).rejects.toThrow('Réponse inconnue pour cette habitude 🤔')
+    expect(checkinsOf(src.getSnapshot(), 'arthus', day).find((c) => c.habitId === snacks.id)?.value).toBe('nickel')
+    // Le message suit le nom de l'habitude (renommée dans l'app).
+    await src.updateHabitLook(snacks.id, { name: 'Chips' })
+    await expect(src.setCheckin(day, snacks.id, 'unpeu')).rejects.toThrow('Pas de « un peu » pour Chips :')
+    // Ongles garde « Un peu ».
+    await src.setCheckin(day, habitOf(src, 'arthus', 'ongles').id, 'unpeu')
+    src.switchPlayer('laetitia')
+    await src.setCheckin(day, habitOf(src, 'laetitia', 'grattage').id, 'unpeu')
+    await expect(src.setCheckin(day, habitOf(src, 'laetitia', 'grignotage').id, 'unpeu')).rejects.toThrow('Pas de « un peu »')
+    src.dispose()
+  })
+
+  it('aucun « Un peu » inventé sur Grignotage (manches passées, voyage, check-in simulé)', () => {
+    vi.useFakeTimers()
+    const src = make()
+    src.setToday('2026-11-22')
+    src.scheduleOtherCheckin()
+    vi.advanceTimersByTime(13_000)
+    const snap = src.getSnapshot()
+    expect(snap.checkins.filter((c) => c.day === '2026-11-22' && c.playerId === 'laetitia').length).toBeGreaterThan(0)
+    const kindOf = new Map(snap.habits.map((h) => [h.id, h.kind]))
+    for (const c of snap.checkins) expect(valuesFor(kindOf.get(c.habitId)!), `${c.habitId} ${c.day}`).toContain(c.value)
+    // Il y a bien des Nickel ET des Craquage sur Grignotage, et des « Un peu » ailleurs.
+    const snacks = snap.checkins.filter((c) => kindOf.get(c.habitId) === 'avoid_strict').map((c) => c.value)
+    expect(new Set(snacks)).toEqual(new Set(['nickel', 'craquage']))
+    expect(snap.checkins.some((c) => c.value === 'unpeu')).toBe(true)
+    src.dispose()
+  })
+
+  it('propositions : on peut ajouter une habitude tout ou rien, ou y passer une habitude (lundi suivant)', async () => {
+    const src = make()
+    await src.propose({ kind: 'habit_add', name: 'Sucre', emoji: '🍬', hint: '', habitKind: 'avoid_strict' })
+    await src.propose({ kind: 'habit_kind', habitId: 'arthus-ongles', habitKind: 'avoid_strict' })
+    await expect(src.propose({ kind: 'habit_kind', habitId: 'arthus-sport', habitKind: 'maybe' as never })).rejects.toThrow(
+      'Type d’habitude inconnu 🤔',
+    )
+    src.switchPlayer('laetitia')
+    for (const p of src.getSnapshot().proposals.filter((x) => x.status === 'pending' && x.authorId === 'arthus')) {
+      await src.answerProposal(p.id, true)
+    }
+    const added = src.getSnapshot().habits.filter((h) => h.playerId === 'arthus' && h.activeFrom === '2026-11-23')
+    expect(added.map((h) => [h.name, h.kind])).toEqual([
+      ['Sucre', 'avoid_strict'],
+      ['Ongles', 'avoid_strict'],
+    ])
+    src.dispose()
+  })
+
+  it('remettre « Un peu » sur Grignotage garde 🔒 Frigo fermé ; le passer « à faire », non', async () => {
+    const src = make()
+    await src.propose({ kind: 'habit_kind', habitId: 'arthus-grignotage', habitKind: 'avoid' })
+    src.switchPlayer('laetitia')
+    await src.propose({ kind: 'habit_kind', habitId: 'laetitia-grignotage', habitKind: 'do' })
+    for (const author of ['arthus', 'laetitia'] as const) {
+      src.switchPlayer(author === 'arthus' ? 'laetitia' : 'arthus')
+      const p = src.getSnapshot().proposals.find((x) => x.status === 'pending' && x.authorId === author && x.payload.kind === 'habit_kind')!
+      await src.answerProposal(p.id, true)
+    }
+    const next = src.getSnapshot().habits.filter((h) => h.name === 'Grignotage' && h.activeFrom === '2026-11-23')
+    expect(next.map((h) => [h.playerId, h.kind, h.badgeKey])).toEqual([
+      ['arthus', 'avoid', 'grignotage'],
+      ['laetitia', 'do', null],
+    ])
+    // 7 jours Nickel sur le nouveau Grignotage d'Arthus (dès lundi 23) : 🔒 Frigo fermé.
+    const fresh = next[0]
+    src.setToday('2026-11-29')
+    const days = Array.from({ length: 7 }, (_, i) => `2026-11-${23 + i}`)
+    const base = src.getSnapshot()
+    const snapshot: DuelSnapshot = {
+      ...base,
+      checkins: [
+        ...base.checkins.filter((c) => !(c.habitId === fresh.id && days.includes(c.day))),
+        ...days.map((day) => ({ playerId: 'arthus', habitId: fresh.id, day, value: 'nickel' as const, updatedAt: `${day}T20:00:00.000Z` })),
+      ],
+      badgeUnlocks: [],
+    }
+    const frigo = computeBadges('arthus', snapshot, buildSeason(snapshot, '2026-11-29'), '2026-11-29').find((b) => b.id === 'frigo')!
+    expect(frigo).toMatchObject({ applicable: true, unlocked: true })
+    expect(frigo.unlockDays).toContain('2026-11-29')
+    src.dispose()
   })
 })
 
@@ -300,12 +414,34 @@ describe('DemoSource · stockage', () => {
       items.set('duel-demo-v1', JSON.stringify({ version: 1, anchorReal: '2026-11-16', today: '2026-11-16', meId: 'laetitia' }))
       const src = new DemoSource({ search: '', clock })
       expect(src.getSnapshot().badgeUnlocks).toEqual([])
-      expect(JSON.parse(items.get('duel-demo-v1')!).version).toBe(2)
-      // Et un état v2 est repris tel quel, avec ce qui a été fait.
+      expect(JSON.parse(items.get('duel-demo-v1')!).version).toBe(DEMO_VERSION)
+      // Et un état de la version actuelle est repris tel quel, avec ce qui a été fait.
       src.signInAs('arthus')
       const again = new DemoSource({ search: '', clock })
       expect(again.signedIn).toBe(true)
       expect(again.getSnapshot().meId).toBe('arthus')
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('un état v2 (Grignotage encore avec « Un peu ») est régénéré : Grignotage tout ou rien (précision 22)', () => {
+    const items = new Map<string, string>()
+    const fake = {
+      getItem: (k: string) => items.get(k) ?? null,
+      setItem: (k: string, v: string) => void items.set(k, v),
+      removeItem: (k: string) => void items.delete(k),
+    }
+    vi.stubGlobal('localStorage', fake)
+    try {
+      // Un vrai état v2 : celui d'aujourd'hui, avec le Grignotage d'avant (« à éviter »).
+      const v2 = JSON.parse(JSON.stringify((make() as unknown as { state: DemoState }).state)) as DemoState
+      Object.assign(v2, { version: 2 })
+      v2.habits = v2.habits.map((h) => (h.badgeKey === 'grignotage' ? { ...h, kind: 'avoid' as const } : h))
+      items.set('duel-demo-v1', JSON.stringify(v2))
+      const src = new DemoSource({ search: '', clock })
+      expect(src.getSnapshot().habits.filter((h) => h.badgeKey === 'grignotage').map((h) => h.kind)).toEqual(['avoid_strict', 'avoid_strict'])
+      expect(JSON.parse(items.get('duel-demo-v1')!).version).toBe(3)
     } finally {
       vi.unstubAllGlobals()
     }

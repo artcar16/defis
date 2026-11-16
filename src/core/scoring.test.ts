@@ -5,9 +5,13 @@ import {
   activeHabits,
   canEditCheckin,
   canWeighIn,
+  checkinValueRefusal,
   dailyScore,
+  HABIT_KINDS,
   indexCheckins,
+  isAvoidKind,
   isHabitActiveOn,
+  isHabitKind,
   isInGoalZone,
   isWeighInDay,
   maxPointsFor,
@@ -24,7 +28,8 @@ import {
 } from './scoring'
 import { buildSeason } from './season'
 import { A, L, START, ci, defaultHabits, fillPlayer, makeHabit, makeSnapshot, scoringDataOf, weighIns } from './test-helpers'
-import type { Checkin } from './types'
+import { NBSP } from './fr'
+import type { Checkin, CheckinValue, HabitKind } from './types'
 
 const MON = START // lundi 26 octobre 2026
 const SUN = addDays(MON, 6)
@@ -50,6 +55,70 @@ describe('points du check-in', () => {
     expect(maxPointsFor('do')).toBe(10)
     expect(valuesFor('avoid')).toEqual(['nickel', 'unpeu', 'craquage'])
     expect(valuesFor('do')).toEqual(['fait', 'pasfait'])
+  })
+})
+
+describe('à éviter, tout ou rien (avoid_strict, précision 22)', () => {
+  it('seulement Nickel ou Craquage, de la meilleure à la pire', () => {
+    expect(valuesFor('avoid_strict')).toEqual(['nickel', 'craquage'])
+  })
+  it('même barème que « à éviter » : nickel 10, craquage 0, max 10', () => {
+    expect(pointsFor('avoid_strict', 'nickel')).toBe(RULES.checkin.avoid.nickel)
+    expect(pointsFor('avoid_strict', 'nickel')).toBe(10)
+    expect(pointsFor('avoid_strict', 'craquage')).toBe(0)
+    expect(maxPointsFor('avoid_strict')).toBe(10)
+    expect(pointsFor('avoid_strict', null)).toBe(0)
+    expect(pointsFor('avoid_strict', 'fait')).toBe(0)
+  })
+  it('un « Un peu » saisi AVANT le passage en tout ou rien garde ses 5 pts (historique)', () => {
+    expect(pointsFor('avoid_strict', 'unpeu')).toBe(RULES.checkin.avoid.unpeu)
+    expect(pointsFor('avoid_strict', 'unpeu')).toBe(5)
+  })
+  it('c’est une habitude à éviter (séries « sans… », 🔥 Inarrêtable)', () => {
+    expect(isAvoidKind('avoid')).toBe(true)
+    expect(isAvoidKind('avoid_strict')).toBe(true)
+    expect(isAvoidKind('do')).toBe(false)
+  })
+  it('les trois types d’habitude', () => {
+    expect(HABIT_KINDS).toEqual(['avoid', 'avoid_strict', 'do'])
+    for (const k of HABIT_KINDS) expect(isHabitKind(k)).toBe(true)
+    for (const k of ['maybe', 'AVOID', '', null, 3, 'toString', '__proto__']) expect(isHabitKind(k), String(k)).toBe(false)
+  })
+  it('score du jour : Grignotage tout ou rien parmi les habitudes de départ', () => {
+    const habits = defaultHabits()
+    expect(habits.filter((h) => h.badgeKey === 'grignotage').map((h) => h.kind)).toEqual(['avoid_strict', 'avoid_strict'])
+    const day = (values: [CheckinValue, CheckinValue, CheckinValue]) =>
+      dailyScore(A, MON, habits, indexCheckins(['a-ongles', 'a-grignotage', 'a-sport'].map((id, i) => ci(A, id, MON, values[i]))))
+    expect(day(['nickel', 'nickel', 'fait'])).toMatchObject({ score: 100, points: 30, possible: 30, complete: true, perfect: true })
+    expect(day(['nickel', 'craquage', 'fait'])).toMatchObject({ score: 67, points: 20, possible: 30, complete: true, perfect: false })
+    // Le « Un peu » d'aujourd'hui, saisi juste avant le changement : 25 / 30 = 83.
+    expect(day(['nickel', 'unpeu', 'fait'])).toMatchObject({ score: 83, points: 25, complete: true, perfect: false })
+    // Ongles garde son « Un peu ».
+    expect(day(['unpeu', 'nickel', 'fait'])).toMatchObject({ score: 83, points: 25 })
+  })
+})
+
+describe('checkinValueRefusal (même texte que le serveur)', () => {
+  const habit = (kind: HabitKind, name = 'Grignotage') => ({ kind, name })
+  it('les réponses de son type passent, effacer aussi', () => {
+    for (const kind of HABIT_KINDS) {
+      for (const v of valuesFor(kind)) expect(checkinValueRefusal(habit(kind), v), `${kind}/${v}`).toBeNull()
+      expect(checkinValueRefusal(habit(kind), null)).toBeNull()
+    }
+  })
+  it('« Un peu » sur une habitude tout ou rien : un message clair, avec son nom', () => {
+    expect(checkinValueRefusal(habit('avoid_strict'), 'unpeu')).toBe(
+      `Pas de «${NBSP}un peu${NBSP}» pour Grignotage${NBSP}: c’est Nickel ou Craquage 😉`,
+    )
+    // Le nom tel quel (renommé dans l'app, avec une apostrophe droite).
+    expect(checkinValueRefusal(habit('avoid_strict', "Chips d'apéro"), 'unpeu')).toBe(
+      `Pas de «${NBSP}un peu${NBSP}» pour Chips d'apéro${NBSP}: c’est Nickel ou Craquage 😉`,
+    )
+  })
+  it('une réponse d’un autre type : message générique', () => {
+    expect(checkinValueRefusal(habit('avoid_strict'), 'fait')).toBe('Réponse inconnue pour cette habitude 🤔')
+    expect(checkinValueRefusal(habit('avoid'), 'pasfait')).toBe('Réponse inconnue pour cette habitude 🤔')
+    expect(checkinValueRefusal(habit('do'), 'unpeu')).toBe('Réponse inconnue pour cette habitude 🤔')
   })
 })
 

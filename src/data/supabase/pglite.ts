@@ -131,8 +131,19 @@ async function buildTemplate(): Promise<PGlite> {
   return db
 }
 
-/** Une base neuve : Supabase simulé + migration + données de départ. */
-export async function createTestDb(): Promise<TestDb> {
+/**
+ * Une base neuve : Supabase simulé + migration + données de départ.
+ * `migrationSql` : une AUTRE version du script (ex. une ancienne, pour tester la mise à jour
+ * d'une base existante, voir upgrade.test.ts) ; `reset()` relance quand même la migration
+ * actuelle.
+ */
+export async function createTestDb(opts: { migrationSql?: string } = {}): Promise<TestDb> {
+  if (opts.migrationSql !== undefined) {
+    const db = new PGlite({ extensions: { pgcrypto } })
+    await db.exec(SUPABASE_SIM_SQL)
+    await db.exec(opts.migrationSql)
+    return wrap(db)
+  }
   template ??= buildTemplate()
   const db = (await (await template).clone()) as PGlite
   return wrap(db)

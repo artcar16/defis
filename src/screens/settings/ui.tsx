@@ -218,54 +218,6 @@ export function EmojiGrid({
   )
 }
 
-// ─── Puces / segments ────────────────────────────────────────────────────────
-
-/** Choix exclusif en grosses pastilles (type d'habitude…). */
-export function Segmented<T extends string>({
-  options,
-  value,
-  onChange,
-  label,
-  color = 'var(--me)',
-}: {
-  options: { value: T; label: ReactNode }[]
-  value: T
-  onChange: (v: T) => void
-  label: string
-  color?: string
-}) {
-  const reduced = useReducedMotion() ?? false
-  const id = useId()
-  return (
-    <div role="radiogroup" aria-label={label} className="grid grid-cols-2 gap-1 rounded-full bg-sunken p-1.5">
-      {options.map((o) => {
-        const active = o.value === value
-        return (
-          <motion.button
-            key={o.value}
-            type="button"
-            role="radio"
-            aria-checked={active}
-            onClick={() => onChange(o.value)}
-            whileTap={reduced ? undefined : { scale: 0.95 }}
-            className={`relative min-h-12 rounded-full px-3 font-display text-[16px] font-semibold ${active ? 'text-ink' : 'text-ink-soft'}`}
-          >
-            {active && (
-              <motion.span
-                layoutId={`seg-${id}`}
-                className="absolute inset-0 rounded-full bg-surface"
-                style={{ boxShadow: `0 3px 0 ${tint(color, 45, 'var(--color-line)')}, var(--shadow-card)` }}
-                transition={reduced ? { duration: 0 } : springy}
-              />
-            )}
-            <span className="relative">{o.label}</span>
-          </motion.button>
-        )
-      })}
-    </div>
-  )
-}
-
 // ─── Dépliant ────────────────────────────────────────────────────────────────
 
 export function Collapsible({

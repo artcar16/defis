@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { addDays } from './dates'
-import { indexCheckins } from './scoring'
+import { indexCheckins, isAvoidKind } from './scoring'
 import { checkinStreak, habitCalendar, habitStreak, isSuccess, scanStreak, type DayVerdict } from './streaks'
 import { A, START, ci, defaultHabits, fill, fillPlayer, makeHabit } from './test-helpers'
 import type { Checkin } from './types'
@@ -45,6 +45,15 @@ describe('habitStreak', () => {
     const c = [...fill(nails, d(0), d(6)), ci(A, nails.id, d(7), 'craquage'), ...fill(nails, d(8), d(10))]
     expect(streak(c, d(10))).toEqual({ current: 3, record: 7, recordEnd: d(6) })
   })
+  it('habitude tout ou rien (Grignotage) : les jours « nickel », un craquage casse la série', () => {
+    const snacks = makeHabit('a-grignotage', A, 'avoid_strict', { badgeKey: 'grignotage' })
+    const c = [...fill(snacks, d(0), d(4)), ci(A, snacks.id, d(5), 'craquage'), ...fill(snacks, d(6), d(7))]
+    expect(fill(snacks, d(0), d(0))[0].value).toBe('nickel')
+    expect(streak(c, d(7), snacks)).toEqual({ current: 2, record: 5, recordEnd: d(4) })
+    // Un vieux « un peu » (saisi avant le passage en tout ou rien) n'est pas un nickel.
+    const old = [...fill(snacks, d(0), d(1)), ci(A, snacks.id, d(2), 'unpeu'), ...fill(snacks, d(3), d(3))]
+    expect(streak(old, d(3), snacks)).toEqual({ current: 1, record: 2, recordEnd: d(1) })
+  })
   it('habitude « à faire » : les jours « fait »', () => {
     const c = [...fill(sport, d(0), d(2)), ci(A, sport.id, d(3), 'pasfait'), ...fill(sport, d(4), d(5))]
     expect(streak(c, d(5), sport)).toEqual({ current: 2, record: 3, recordEnd: d(2) })
@@ -72,7 +81,7 @@ describe('checkinStreak (check-in complet)', () => {
   const s = (checkins: Checkin[], today: string) => checkinStreak(A, habits, indexCheckins(checkins), START, today)
 
   it('compte les jours complets, peu importe les réponses', () => {
-    const c = fillPlayer(habits, A, d(0), d(4), (h) => (h.kind === 'avoid' ? 'craquage' : 'pasfait'))
+    const c = fillPlayer(habits, A, d(0), d(4), (h) => (isAvoidKind(h.kind) ? 'craquage' : 'pasfait'))
     expect(s(c, d(4))).toEqual({ current: 5, record: 5, recordEnd: d(4) })
   })
   it('aujourd’hui à moitié rempli ne casse pas la série', () => {

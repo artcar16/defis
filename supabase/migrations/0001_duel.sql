@@ -25,6 +25,9 @@
 -- On peut le relancer sans risque (après une mise à jour du fichier, par exemple) : il ne
 -- casse rien et n'efface aucune donnée. Les données de départ ne sont créées qu'une fois ;
 -- seule la table des règles (duel.rules) est recopiée à chaque fois depuis ce fichier.
+-- Relancer le script met à jour les fonctions et les règles, jamais vos données : un
+-- changement de vos données décidé ensuite a son propre petit script, à lancer APRÈS
+-- celui-ci (ex. supabase/grignotage-tout-ou-rien.sql, précision 22 de SPEC.md).
 --
 -- Petits dépannages (à lancer dans le SQL Editor) :
 --   - Code oublié (ou vu par quelqu'un) : select duel.reset_code('arthus', '482916');
@@ -109,7 +112,8 @@ create table if not exists duel.habits (
   name         text not null,
   hint         text not null default '',
   emoji        text not null,
-  kind         text not null check (kind in ('avoid', 'do')),
+  -- Type d'habitude : contrainte habits_kind_check juste en dessous.
+  kind         text not null,
   badge_key    text check (badge_key in ('ongles', 'grattage', 'grignotage', 'sport')),
   -- Premier jour où elle compte (inclus) / premier jour où elle ne compte plus (exclu).
   active_from  date not null,
@@ -118,6 +122,14 @@ create table if not exists duel.habits (
   created_at   timestamptz not null default duel.now()
 );
 create index if not exists habits_player_idx on duel.habits (player_id);
+-- Types d'habitude (HabitKind de src/core/types.ts) : 'avoid' = à éviter (Nickel, Un peu,
+-- Craquage), 'avoid_strict' = à éviter, tout ou rien (Nickel ou Craquage, précision 22),
+-- 'do' = à faire. Redéfinis à chaque exécution, comme events_kind_check : une base créée par
+-- une version d'avant (check « avoid / do » posé par le create table, que Postgres avait
+-- nommé habits_kind_check) accepte un nouveau type en relançant le script. Les habitudes
+-- déjà là ne changent pas (elles sont toutes d'un type accepté).
+alter table duel.habits drop constraint if exists habits_kind_check;
+alter table duel.habits add constraint habits_kind_check check (kind in ('avoid', 'avoid_strict', 'do'));
 
 -- Un seul check-in par joueur, habitude et jour.
 create table if not exists duel.checkins (
@@ -428,6 +440,19 @@ language sql stable set search_path = '' as $$
   from duel.rules r cross join duel.settings s
 $$;
 
+-- valuesFor : les réponses qu'on peut choisir pour un type d'habitude, de la meilleure à la
+-- pire (null = type inconnu). Tout ou rien (avoid_strict) : pas de « un peu ». Un « un peu »
+-- saisi AVANT qu'une habitude passe en tout ou rien reste en place et garde ses points
+-- (pointsFor), on ne peut juste plus en saisir de nouveau (précision 22).
+create or replace function duel.checkin_values(p_kind text) returns text[]
+language sql immutable set search_path = '' as $$
+  select case p_kind
+    when 'avoid'        then array['nickel', 'unpeu', 'craquage']
+    when 'avoid_strict' then array['nickel', 'craquage']
+    when 'do'           then array['fait', 'pasfait']
+  end
+$$;
+
 -- isHabitActiveOn : activeFrom <= jour < activeUntil.
 create or replace function duel.habit_active_on(p_from date, p_until date, p_day date) returns boolean
 language sql immutable set search_path = '' as $$
@@ -672,13 +697,17 @@ begin
     where h.id = (v_p.payload ->> 'habitId')::uuid and h.active_until is null;
   when 'habit_kind' then
     -- On clôt l'ancienne et on en crée une nouvelle : l'historique garde son type.
-    -- Rien si elle est déjà close.
+    -- Rien si elle est déjà close. Le badge suit si elle reste du même genre (« à éviter »
+    -- ↔ « tout ou rien », ou « à faire ») : badgeKeyAfterKindChange de src/core/badges.ts.
     select * into v_old from duel.habits h
     where h.id = (v_p.payload ->> 'habitId')::uuid and h.active_until is null;
     if found then
       update duel.habits h set active_until = v_from where h.id = v_old.id;
       insert into duel.habits (player_id, name, hint, emoji, kind, badge_key, active_from, active_until, sort_order)
-      values (v_old.player_id, v_old.name, v_old.hint, v_old.emoji, v_p.payload ->> 'habitKind', null,
+      values (v_old.player_id, v_old.name, v_old.hint, v_old.emoji, v_p.payload ->> 'habitKind',
+              case when (v_old.kind in ('avoid', 'avoid_strict'))
+                        = ((v_p.payload ->> 'habitKind') in ('avoid', 'avoid_strict'))
+                   then v_old.badge_key end,
               v_from, null, v_old.sort_order);
     end if;
   when 'weigh_day' then
@@ -973,9 +1002,12 @@ begin
   if not duel.habit_active_on(v_habit.active_from, v_habit.active_until, p_day) then
     perform duel.fail('Cette habitude ne compte pas ce jour-là 📅');
   end if;
-  if p_value is not null and not (
-       (v_habit.kind = 'avoid' and p_value in ('nickel', 'unpeu', 'craquage'))
-    or (v_habit.kind = 'do' and p_value in ('fait', 'pasfait'))) then
+  -- Une réponse de son type (valuesFor). Mêmes messages que checkinValueRefusal de
+  -- src/core/scoring.ts : un « un peu » sur une habitude tout ou rien a le sien (précision 22).
+  if p_value is not null and not coalesce(p_value = any (duel.checkin_values(v_habit.kind)), false) then
+    if v_habit.kind = 'avoid_strict' and p_value = 'unpeu' then
+      perform duel.fail(pg_catalog.format(E'Pas de « un peu » pour %s : c’est Nickel ou Craquage 😉', v_habit.name));
+    end if;
     perform duel.fail('Réponse inconnue pour cette habitude 🤔');
   end if;
 
@@ -1137,10 +1169,11 @@ begin
       perform duel.fail('Cette habitude est déjà désactivée 🤷');
     end if;
   end if;
-  -- Type d'habitude (habit_add, habit_kind).
+  -- Type d'habitude (habit_add, habit_kind) : un type connu (duel.checkin_values), tout ou
+  -- rien compris. decide le reprend tel quel.
   if v_kind in ('habit_add', 'habit_kind') then
     v_hkind := p_payload ->> 'habitKind';
-    if pg_catalog.jsonb_typeof(p_payload -> 'habitKind') is distinct from 'string' or v_hkind not in ('avoid', 'do') then
+    if pg_catalog.jsonb_typeof(p_payload -> 'habitKind') is distinct from 'string' or duel.checkin_values(v_hkind) is null then
       perform duel.fail('Type d’habitude inconnu 🤔');
     end if;
   end if;
@@ -1570,16 +1603,17 @@ on conflict (id) do nothing;
 
 -- Les habitudes de départ (DEFAULT_HABITS), une copie par propriétaire, actives dès la 1re manche.
 -- Identifiants fixes (dérivés du joueur et du badge, au format uuid v4) : relancer le script
--- ne les duplique pas.
+-- ne les duplique pas, et ne change pas celles d'une base déjà créée (Grignotage tout ou rien
+-- sur une base d'avant : supabase/grignotage-tout-ou-rien.sql).
 insert into duel.habits (id, player_id, badge_key, name, hint, emoji, kind, sort_order, active_from)
 select overlay(overlay(md5('duel-seed|' || v.player_id || '|' || v.badge_key) placing '4' from 13) placing '8' from 17)::uuid,
        v.player_id, v.badge_key, v.name, v.hint, v.emoji, v.kind, v.sort_order, s.season_start
 from (values
   ('laetitia', 'grattage',   'Grattage',   'Ne pas se gratter',          '🦟', 'avoid', 0),
-  ('laetitia', 'grignotage', 'Grignotage', 'En dehors des repas',        '🍪', 'avoid', 1),
+  ('laetitia', 'grignotage', 'Grignotage', 'En dehors des repas',        '🍪', 'avoid_strict', 1),
   ('laetitia', 'sport',      'Sport',      '30 min d’activité minimum',  '🏃', 'do',    2),
   ('arthus',   'ongles',     'Ongles',     'Ne pas se les ronger',       '💅', 'avoid', 0),
-  ('arthus',   'grignotage', 'Grignotage', 'En dehors des repas',        '🍪', 'avoid', 1),
+  ('arthus',   'grignotage', 'Grignotage', 'En dehors des repas',        '🍪', 'avoid_strict', 1),
   ('arthus',   'sport',      'Sport',      '30 min d’activité minimum',  '🏃', 'do',    2)
 ) as v (player_id, badge_key, name, hint, emoji, kind, sort_order)
 cross join duel.settings s

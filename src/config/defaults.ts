@@ -38,7 +38,7 @@ export interface DefaultHabit {
 export const DEFAULT_HABITS: DefaultHabit[] = [
   { owners: ['arthus'], name: 'Ongles', hint: 'Ne pas se les ronger', emoji: '💅', kind: 'avoid', badgeKey: 'ongles' },
   { owners: ['laetitia'], name: 'Grattage', hint: 'Ne pas se gratter', emoji: '🦟', kind: 'avoid', badgeKey: 'grattage' },
-  { owners: ['laetitia', 'arthus'], name: 'Grignotage', hint: 'En dehors des repas', emoji: '🍪', kind: 'avoid', badgeKey: 'grignotage' },
+  { owners: ['laetitia', 'arthus'], name: 'Grignotage', hint: 'En dehors des repas', emoji: '🍪', kind: 'avoid_strict', badgeKey: 'grignotage' },
   { owners: ['laetitia', 'arthus'], name: 'Sport', hint: '30 min d’activité minimum', emoji: '🏃', kind: 'do', badgeKey: 'sport' },
 ]
 
@@ -49,7 +49,7 @@ export const HABIT_IDEAS: { name: string; emoji: string; kind: HabitKind }[] = [
   { name: 'Sommeil', emoji: '😴', kind: 'do' },
   { name: 'Écrans au lit', emoji: '📱', kind: 'avoid' },
   { name: 'Légumes', emoji: '🥦', kind: 'do' },
-  { name: 'Sucre', emoji: '🍬', kind: 'avoid' },
+  { name: 'Sucre', emoji: '🍬', kind: 'avoid_strict' },
 ]
 
 /**

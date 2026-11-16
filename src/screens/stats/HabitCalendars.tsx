@@ -8,13 +8,20 @@ import { addDays, ISO_DAY_SHORT, weekEndOf, weekStartOf } from '../../core/dates
 import { frDate, frDayMonth, NBSP, plural, pluralWord } from '../../core/fr'
 import type { CheckinIndex } from '../../core/scoring'
 import { habitCalendar, habitStreak, type CalendarCell, type DayStatus } from '../../core/streaks'
-import type { DayKey, Habit, Player } from '../../core/types'
+import type { DayKey, Habit, HabitKind, Player } from '../../core/types'
 import { deep, tint } from '../../ui/color'
 import { Card, springy, VALUE_COLORS, VALUE_LABELS } from '../../ui/kit'
 import { PlayerToggle } from './bits'
 
 /** Nombre de semaines affichées (au plus). */
 const WEEKS_SHOWN = 5
+
+/** Le type sous le nom de l'habitude. */
+const KIND_TAG: Record<HabitKind, string> = {
+  avoid: '🙅 À éviter',
+  avoid_strict: `🙅 À éviter${NBSP}· tout${NBSP}ou${NBSP}rien`,
+  do: '✊ À faire',
+}
 
 function statusInfo(status: DayStatus, isToday = false): { emoji: string; label: string } {
   if (status in VALUE_LABELS) return VALUE_LABELS[status]
@@ -137,7 +144,7 @@ function HabitCalendarCard({ view, player, today, from }: { view: HabitView; pla
             {habit.name}
           </h3>
           <p className="text-[14px] font-semibold text-muted" title={habit.hint || undefined}>
-            {habit.kind === 'avoid' ? '🙅 À éviter' : '✊ À faire'}
+            {KIND_TAG[habit.kind]}
           </p>
         </div>
         <div className="flex gap-1.5 @max-[320px]:col-span-2">

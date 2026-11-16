@@ -27,10 +27,10 @@
 --   Si un message d'erreur s'affiche à la place (date qui n'est pas un lundi…), RIEN n'a été
 --   effacé : corrige la date comme le message le propose, et relance.
 --
--- Les téléphones ouverts se mettent à jour tout seuls dans la seconde, sans notification ;
--- les autres, dès qu'on revient dans l'app. On peut le relancer sans risque. Il suppose que
--- 0001_duel.sql a déjà été lancé, et il n'ajoute rien que l'app ou un téléphone pourrait
--- appeler : il ne marche que depuis le SQL Editor. Tests : src/data/supabase/reset.test.ts.
+-- Il suppose 0001_duel.sql déjà lancé, et l'app des téléphones à jour (README, étape 0 de
+-- « Grignotage tout ou rien »). Les téléphones ouverts se mettent alors à jour tout seuls,
+-- sans notification ; les autres, dès qu'on revient dans l'app. On peut le relancer sans
+-- risque. Rien d'appelable par un téléphone : il ne marche que depuis le SQL Editor.
 -- ════════════════════════════════════════════════════════════════════════════
 
 do $remise$
@@ -58,6 +58,16 @@ begin
      or not exists (select 1 from duel.settings) then
     raise exception using message =
       'Il manque des données de départ : relance d’abord le script supabase/migrations/0001_duel.sql, puis celui-ci. Rien n’a été effacé.';
+  end if;
+
+  -- Une base d'une version d'avant ne connaît pas Grignotage « tout ou rien » (précision 22) :
+  -- il faut d'abord relancer 0001_duel.sql (sinon les habitudes de départ seraient refusées).
+  if pg_catalog.to_regprocedure('duel.checkin_values(text)') is null
+     or not exists (select 1 from pg_catalog.pg_constraint c
+                    where c.conrelid = pg_catalog.to_regclass('duel.habits') and c.conname = 'habits_kind_check'
+                      and pg_catalog.pg_get_constraintdef(c.oid) like '%avoid_strict%') then
+    raise exception using message =
+      'Ta base date d’une version d’avant : relance d’abord le script supabase/migrations/0001_duel.sql en entier, puis celui-ci. Rien n’a été effacé.';
   end if;
 
   -- La date : une vraie date, un lundi, pas avant cette semaine (heure de Paris).
@@ -121,10 +131,10 @@ begin
          v.player_id, v.badge_key, v.name, v.hint, v.emoji, v.kind, v.sort_order, v_debut
   from (values
     ('laetitia', 'grattage',   'Grattage',   'Ne pas se gratter',          '🦟', 'avoid', 0),
-    ('laetitia', 'grignotage', 'Grignotage', 'En dehors des repas',        '🍪', 'avoid', 1),
+    ('laetitia', 'grignotage', 'Grignotage', 'En dehors des repas',        '🍪', 'avoid_strict', 1),
     ('laetitia', 'sport',      'Sport',      '30 min d’activité minimum',  '🏃', 'do',    2),
     ('arthus',   'ongles',     'Ongles',     'Ne pas se les ronger',       '💅', 'avoid', 0),
-    ('arthus',   'grignotage', 'Grignotage', 'En dehors des repas',        '🍪', 'avoid', 1),
+    ('arthus',   'grignotage', 'Grignotage', 'En dehors des repas',        '🍪', 'avoid_strict', 1),
     ('arthus',   'sport',      'Sport',      '30 min d’activité minimum',  '🏃', 'do',    2)
   ) as v (player_id, badge_key, name, hint, emoji, kind, sort_order);
 

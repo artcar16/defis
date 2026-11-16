@@ -15,7 +15,15 @@
  */
 import { DEFAULT_GAGES, DEFAULT_HABITS, DEFAULT_PLAYERS } from '../../config/defaults'
 import { addDays, daysRange, weekDays, weekStartOf } from '../../core/dates'
-import { activeHabits, canEditCheckin, indexCheckins, isWeighInDay, playerWeekScore, weighInDateOfWeek } from '../../core/scoring'
+import {
+  activeHabits,
+  canEditCheckin,
+  indexCheckins,
+  isAvoidKind,
+  isWeighInDay,
+  playerWeekScore,
+  weighInDateOfWeek,
+} from '../../core/scoring'
 import { drawStake } from '../../core/stake'
 import type {
   BadgeUnlock,
@@ -41,7 +49,11 @@ export interface GoalRule {
   kg: number | null
 }
 
-export const DEMO_VERSION = 2
+/**
+ * Version de l'état de la démo : un état enregistré d'une autre version est régénéré.
+ * 3 : Grignotage « tout ou rien » (précision 22 de SPEC.md).
+ */
+export const DEMO_VERSION = 3
 
 /** L'état complet de la démo (qui connaît tout, y compris les kilos des deux). */
 export interface DemoState {
@@ -112,16 +124,21 @@ export function demoTravelDays(realToday: DayKey): DayKey[] {
   return [...weekDays(monday), addDays(monday, 7)]
 }
 
-/** Probabilités [nickel, un peu] (le reste = craquage) ou [fait] par joueur et habitude. */
+/**
+ * Probabilités [nickel, un peu] (le reste = craquage) ou [fait] par joueur et habitude.
+ * Tout ou rien (pas de « un peu ») : le « un peu » est partagé entre nickel et craquage
+ * (mêmes points en moyenne).
+ */
 const PROFILES: Record<string, Record<string, number[]>> = {
   arthus: { ongles: [0.55, 0.3], grignotage: [0.6, 0.25], sport: [0.55] },
   laetitia: { grattage: [0.62, 0.28], grignotage: [0.5, 0.3], sport: [0.65] },
 }
 
 function pick(rng: () => number, habit: Habit, playerId: PlayerId): CheckinValue {
-  const p = PROFILES[playerId]?.[habit.badgeKey ?? ''] ?? (habit.kind === 'avoid' ? [0.6, 0.25] : [0.6])
+  const p = PROFILES[playerId]?.[habit.badgeKey ?? ''] ?? (isAvoidKind(habit.kind) ? [0.6, 0.25] : [0.6])
   const r = rng()
   if (habit.kind === 'do') return r < p[0] ? 'fait' : 'pasfait'
+  if (habit.kind === 'avoid_strict') return r < p[0] + p[1] / 2 ? 'nickel' : 'craquage'
   return r < p[0] ? 'nickel' : r < p[0] + p[1] ? 'unpeu' : 'craquage'
 }
 
@@ -166,8 +183,8 @@ export function demoWeight(playerId: PlayerId, day: DayKey, weighIns: RawWeighIn
   return Math.round((last + delta) * 10) / 10
 }
 
-const BEST: Record<Habit['kind'], CheckinValue> = { avoid: 'nickel', do: 'fait' }
-const WORST: Record<Habit['kind'], CheckinValue> = { avoid: 'craquage', do: 'pasfait' }
+const BEST: Record<Habit['kind'], CheckinValue> = { avoid: 'nickel', avoid_strict: 'nickel', do: 'fait' }
+const WORST: Record<Habit['kind'], CheckinValue> = { avoid: 'craquage', avoid_strict: 'craquage', do: 'pasfait' }
 
 export function generateDemoState(today: DayKey, anchorReal: DayKey, meId: PlayerId = 'arthus'): DemoState {
   const currentWeek = scenarioWeek(today, anchorReal)

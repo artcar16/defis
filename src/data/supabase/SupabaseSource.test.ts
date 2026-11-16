@@ -51,7 +51,7 @@ function habit(playerId: PlayerId, name: string, kind: Habit['kind'], sortOrder:
     playerId,
     name,
     hint: '',
-    emoji: kind === 'avoid' ? '🍪' : '🏃',
+    emoji: kind === 'do' ? '🏃' : '🍪',
     kind,
     badgeKey: null,
     activeFrom: '2026-11-02',
@@ -714,6 +714,24 @@ describe('SupabaseSource · mises à jour optimistes (garantie 1)', () => {
     await expect(src.setGagePaid('2026-11-09', 'arthus', true)).rejects.toThrow(MESSAGES.notYourGage)
     expect(seen).toHaveLength(0)
     expect(client.calls).toHaveLength(0)
+  })
+
+  it('« Un peu » sur une habitude tout ou rien : refusé tout de suite, avec le message du serveur (précision 22)', async () => {
+    const client = new FakeSupabase().signedInAs('arthus')
+    client.state.habits.push(habit('arthus', 'Grignotage', 'avoid_strict', 2))
+    const { src, seen } = await boot(client)
+    await expect(src.setCheckin(TODAY, 'arthus-Grignotage', 'unpeu')).rejects.toThrow(
+      'Pas de «\u00a0un peu\u00a0» pour Grignotage\u00a0: c’est Nickel ou Craquage 😉',
+    )
+    await expect(src.setCheckin(TODAY, 'arthus-ongles', 'fait')).rejects.toThrow('Réponse inconnue pour cette habitude 🤔')
+    // Rien d'optimiste à annuler, et pas d'appel au serveur.
+    expect(seen).toHaveLength(0)
+    expect(client.calls).toHaveLength(0)
+    // Nickel, Craquage (et effacer) passent ; « Un peu » reste possible sur Ongles.
+    await src.setCheckin(TODAY, 'arthus-Grignotage', 'craquage')
+    await src.setCheckin(TODAY, 'arthus-Grignotage', null)
+    await src.setCheckin(TODAY, 'arthus-ongles', 'unpeu')
+    expect(client.argsOf('set_checkin').map((a) => a.p_value)).toEqual(['craquage', null, 'unpeu'])
   })
 
   it('une action sans être connecté : refusée en français', async () => {
